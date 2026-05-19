@@ -63,7 +63,7 @@ lib.rs (public API + global state)
 
 ## 💪 Benchmarks
 
-I have created `main.js` and `main.rs` for synthetic examples of performance.
+I have created `benchmark.rs` for synthetic examples of performance.
 They load in a full reconstruction of the Lumbridge mapsquare (64x64) tiles
 with full clipping flags set. Then in a loop it runs through 100k pathfinder
 requests to a destination +10 tiles North with a single access point to the destination.
