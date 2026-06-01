@@ -1,3 +1,16 @@
+<div align="center">
+<pre>
+██████╗ ██╗   ██╗███████╗████████╗ ██████╗██╗████████╗██╗   ██╗
+██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝██║╚══██╔══╝╚██╗ ██╔╝
+██████╔╝██║   ██║███████╗   ██║   ██║     ██║   ██║    ╚████╔╝ 
+██╔══██╗██║   ██║╚════██║   ██║   ██║     ██║   ██║     ╚██╔╝  
+██║  ██║╚██████╔╝███████║   ██║   ╚██████╗██║   ██║      ██║   
+╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝╚═╝   ╚═╝      ╚═╝   
+</pre>
+</div>
+
+----
+
 # rs-pathfinder — A BFS pathfinder & collision system
 
 A high-performance Rust implementation of the rsmod pathfinding library (originally Kotlin). This crate implements
