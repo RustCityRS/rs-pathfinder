@@ -4,7 +4,7 @@ use crate::rsmod::flag::collision_flag::CollisionFlag;
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub(crate) unsafe fn can_travel(
+pub(crate) unsafe fn can_travel<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
@@ -13,7 +13,7 @@ pub(crate) unsafe fn can_travel(
     offset_z: i8,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match (offset_x, offset_z) {
         (0, -1) => !is_blocked_south(flags, y, x, z, size, extra_flag, collision),
@@ -29,41 +29,41 @@ pub(crate) unsafe fn can_travel(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_south(
+unsafe fn is_blocked_south<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
-        1 => !collision(
+        1 => !collision.can_move(
             flags.get(x, z - 1, y),
             CollisionFlag::BlockSouth as u32 | extra_flag,
         ),
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x, z - 1, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 1, z - 1, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x, z - 1, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + size as i32 - 1, z - 1, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in x + 1..x + size as i32 - 1 {
-                if !collision(
+                if !collision.can_move(
                     flags.get(mid, z - 1, y),
                     CollisionFlag::BlockNorthEastAndWest as u32 | extra_flag,
                 ) {
@@ -76,41 +76,41 @@ unsafe fn is_blocked_south(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_north(
+unsafe fn is_blocked_north<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
-        1 => !collision(
+        1 => !collision.can_move(
             flags.get(x, z + 1, y),
             CollisionFlag::BlockNorth as u32 | extra_flag,
         ),
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x, z + 2, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 1, z + 2, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x, z + size as i32, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + size as i32 - 1, z + size as i32, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in x + 1..x + size as i32 - 1 {
-                if !collision(
+                if !collision.can_move(
                     flags.get(mid, z + size as i32, y),
                     CollisionFlag::BlockSouthEastAndWest as u32 | extra_flag,
                 ) {
@@ -123,41 +123,41 @@ unsafe fn is_blocked_north(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_west(
+unsafe fn is_blocked_west<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
-        1 => !collision(
+        1 => !collision.can_move(
             flags.get(x - 1, z, y),
             CollisionFlag::BlockWest as u32 | extra_flag,
         ),
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x - 1, z, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x - 1, z + 1, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x - 1, z, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x - 1, z + size as i32 - 1, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in z + 1..z + size as i32 - 1 {
-                if !collision(
+                if !collision.can_move(
                     flags.get(x - 1, mid, y),
                     CollisionFlag::BlockNorthAndSouthEast as u32 | extra_flag,
                 ) {
@@ -170,41 +170,41 @@ unsafe fn is_blocked_west(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_east(
+unsafe fn is_blocked_east<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
-        1 => !collision(
+        1 => !collision.can_move(
             flags.get(x + 1, z, y),
             CollisionFlag::BlockEast as u32 | extra_flag,
         ),
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x + 2, z, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 2, z + 1, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x + size as i32, z, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + size as i32, z + size as i32 - 1, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in z + 1..z + size as i32 - 1 {
-                if !collision(
+                if !collision.can_move(
                     flags.get(x + size as i32, mid, y),
                     CollisionFlag::BlockNorthAndSouthWest as u32 | extra_flag,
                 ) {
@@ -217,52 +217,52 @@ unsafe fn is_blocked_east(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_southwest(
+unsafe fn is_blocked_southwest<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
         1 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x - 1, z - 1, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x - 1, z, y),
                 CollisionFlag::BlockWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x, z - 1, y),
                 CollisionFlag::BlockSouth as u32 | extra_flag,
             )
         }
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x - 1, z, y),
                 CollisionFlag::BlockNorthAndSouthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x - 1, z - 1, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x, z - 1, y),
                 CollisionFlag::BlockNorthEastAndWest as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x - 1, z - 1, y),
                 CollisionFlag::BlockSouthWest as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in 1..size {
-                if !collision(
+                if !collision.can_move(
                     flags.get(x - 1, z + mid as i32 - 1, y),
                     CollisionFlag::BlockNorthAndSouthEast as u32 | extra_flag,
-                ) || !collision(
+                ) || !collision.can_move(
                     flags.get(x + mid as i32 - 1, z - 1, y),
                     CollisionFlag::BlockNorthEastAndWest as u32 | extra_flag,
                 ) {
@@ -275,52 +275,52 @@ unsafe fn is_blocked_southwest(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_northwest(
+unsafe fn is_blocked_northwest<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
         1 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x - 1, z + 1, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x - 1, z, y),
                 CollisionFlag::BlockWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x, z + 1, y),
                 CollisionFlag::BlockNorth as u32 | extra_flag,
             )
         }
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x - 1, z + 1, y),
                 CollisionFlag::BlockNorthAndSouthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x - 1, z + 2, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x, z + 2, y),
                 CollisionFlag::BlockSouthEastAndWest as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x - 1, z + size as i32, y),
                 CollisionFlag::BlockNorthWest as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in 1..size {
-                if !collision(
+                if !collision.can_move(
                     flags.get(x - 1, z + mid as i32, y),
                     CollisionFlag::BlockNorthAndSouthEast as u32 | extra_flag,
-                ) || !collision(
+                ) || !collision.can_move(
                     flags.get(x + mid as i32 - 1, z + size as i32, y),
                     CollisionFlag::BlockSouthEastAndWest as u32 | extra_flag,
                 ) {
@@ -333,52 +333,52 @@ unsafe fn is_blocked_northwest(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_southeast(
+unsafe fn is_blocked_southeast<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
         1 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x + 1, z - 1, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 1, z, y),
                 CollisionFlag::BlockEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x, z - 1, y),
                 CollisionFlag::BlockSouth as u32 | extra_flag,
             )
         }
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x + 1, z - 1, y),
                 CollisionFlag::BlockNorthEastAndWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 2, z - 1, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 2, z, y),
                 CollisionFlag::BlockNorthAndSouthWest as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x + size as i32, z - 1, y),
                 CollisionFlag::BlockSouthEast as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in 1..size {
-                if !collision(
+                if !collision.can_move(
                     flags.get(x + size as i32, z + mid as i32 - 1, y),
                     CollisionFlag::BlockNorthAndSouthWest as u32 | extra_flag,
-                ) || !collision(
+                ) || !collision.can_move(
                     flags.get(x + mid as i32, z - 1, y),
                     CollisionFlag::BlockNorthEastAndWest as u32 | extra_flag,
                 ) {
@@ -391,52 +391,52 @@ unsafe fn is_blocked_southeast(
 }
 
 #[inline(always)]
-unsafe fn is_blocked_northeast(
+unsafe fn is_blocked_northeast<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     x: i32,
     z: i32,
     size: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> bool {
     match size {
         1 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x + 1, z + 1, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 1, z, y),
                 CollisionFlag::BlockEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x, z + 1, y),
                 CollisionFlag::BlockNorth as u32 | extra_flag,
             )
         }
         2 => {
-            !collision(
+            !collision.can_move(
                 flags.get(x + 1, z + 2, y),
                 CollisionFlag::BlockSouthEastAndWest as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 2, z + 2, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
-            ) || !collision(
+            ) || !collision.can_move(
                 flags.get(x + 2, z + 1, y),
                 CollisionFlag::BlockNorthAndSouthWest as u32 | extra_flag,
             )
         }
         _ => {
-            if !collision(
+            if !collision.can_move(
                 flags.get(x + size as i32, z + size as i32, y),
                 CollisionFlag::BlockNorthEast as u32 | extra_flag,
             ) {
                 return true;
             }
             for mid in 1..size {
-                if !collision(
+                if !collision.can_move(
                     flags.get(x + mid as i32, z + size as i32, y),
                     CollisionFlag::BlockSouthEastAndWest as u32 | extra_flag,
-                ) || !collision(
+                ) || !collision.can_move(
                     flags.get(x + size as i32, z + mid as i32, y),
                     CollisionFlag::BlockNorthAndSouthWest as u32 | extra_flag,
                 ) {
@@ -451,7 +451,9 @@ unsafe fn is_blocked_northeast(
 #[cfg(test)]
 mod tests {
     use crate::rsmod::collision::collision::CollisionFlagMap;
-    use crate::rsmod::collision::collision_strategy::{CollisionType, get_collision_strategy};
+    use crate::rsmod::collision::collision_strategy::{
+        Blocked, Indoors, LineOfSight, Normal, Outdoors,
+    };
     use crate::rsmod::flag::collision_flag::CollisionFlag;
     use crate::rsmod::step_validator::can_travel;
 
@@ -532,7 +534,7 @@ mod tests {
                         dir_z as i8,
                         size as u8,
                         0,
-                        &get_collision_strategy(CollisionType::Normal),
+                        &Normal,
                     );
                     assert!(step);
                 }
@@ -568,7 +570,7 @@ mod tests {
                         dir_z as i8,
                         size as u8,
                         0,
-                        &get_collision_strategy(CollisionType::Normal),
+                        &Normal,
                     );
                     assert!(!step);
                 }
@@ -613,7 +615,7 @@ mod tests {
                             dir_z as i8,
                             size as u8,
                             flag,
-                            &get_collision_strategy(CollisionType::Normal),
+                            &Normal,
                         );
                         assert!(!step);
                     }
@@ -648,7 +650,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::Blocked),
+                        &Blocked,
                     );
                     assert!(step);
                 }
@@ -693,7 +695,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::Indoors),
+                        &Indoors,
                     );
                     assert!(step1);
 
@@ -706,7 +708,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::Indoors),
+                        &Indoors,
                     );
                     assert!(!step2);
                 }
@@ -750,7 +752,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::Outdoors),
+                        &Outdoors,
                     );
                     assert!(step1);
 
@@ -763,7 +765,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::Outdoors),
+                        &Outdoors,
                     );
                     assert!(!step2);
                 }
@@ -812,7 +814,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::LineOfSight),
+                        &LineOfSight,
                     );
                     assert!(step1);
 
@@ -825,7 +827,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::LineOfSight),
+                        &LineOfSight,
                     );
                     assert!(!step2);
                 }
@@ -869,7 +871,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::LineOfSight),
+                        &LineOfSight,
                     );
                     assert!(step1);
 
@@ -882,7 +884,7 @@ mod tests {
                         dir_z as i8,
                         1,
                         0,
-                        &get_collision_strategy(CollisionType::LineOfSight),
+                        &LineOfSight,
                     );
                     assert!(step2);
                 }

@@ -50,7 +50,7 @@ pub fn find_path(
     collision: CollisionType,
 ) -> &'static [u32] {
     unsafe {
-        PATHFINDER.find_path(
+        with_collision_strategy!(collision, strategy => PATHFINDER.find_path(
             &COLLISION_FLAGS,
             y as i32,
             src_x as i32,
@@ -65,8 +65,8 @@ pub fn find_path(
             move_near,
             block_access_flags,
             max_waypoints,
-            get_collision_strategy(collision),
-        )
+            strategy,
+        ))
     }
 }
 
@@ -85,7 +85,7 @@ pub fn find_naive_path(
     collision: CollisionType,
 ) -> &'static [u32] {
     unsafe {
-        rsmod::naive_pathfinder::find_naive_path(
+        with_collision_strategy!(collision, strategy => rsmod::naive_pathfinder::find_naive_path(
             &COLLISION_FLAGS,
             y as i32,
             src_x as i32,
@@ -97,8 +97,8 @@ pub fn find_naive_path(
             dest_width,
             dest_length,
             extra_flag,
-            &get_collision_strategy(collision),
-        )
+            strategy,
+        ))
     }
 }
 
@@ -128,7 +128,7 @@ pub fn change_loc(
         mask |= CollisionFlag::LocProjBlocker as u32;
     }
     if breakroutefinding {
-        mask |= CollisionFlag::locRouteBlocker as u32;
+        mask |= CollisionFlag::LocRouteBlocker as u32;
     }
     let x = x as i32;
     let z = z as i32;
@@ -522,7 +522,7 @@ pub fn can_travel(
     collision: CollisionType,
 ) -> bool {
     unsafe {
-        rsmod::step_validator::can_travel(
+        with_collision_strategy!(collision, strategy => rsmod::step_validator::can_travel(
             &COLLISION_FLAGS,
             y as i32,
             x as i32,
@@ -531,8 +531,8 @@ pub fn can_travel(
             offset_z,
             size,
             extra_flag,
-            &get_collision_strategy(collision),
-        )
+            strategy,
+        ))
     }
 }
 
@@ -685,17 +685,6 @@ pub fn reached(
             shape,
             block_access_flags,
         )
-    }
-}
-
-#[inline(always)]
-fn get_collision_strategy(collision: CollisionType) -> CollisionStrategy {
-    match collision {
-        CollisionType::Normal => normal_strategy,
-        CollisionType::Blocked => blocked_strategy,
-        CollisionType::Indoors => indoors_strategy,
-        CollisionType::Outdoors => outdoors_strategy,
-        CollisionType::LineOfSight => line_of_sight_strategy,
     }
 }
 

@@ -49,7 +49,7 @@ pub enum CollisionFlag {
     WallSouthRouteBlocker = 0x8000000,
     WallSouthWestRouteBlocker = 0x10000000,
     WallWestRouteBlocker = 0x20000000,
-    locRouteBlocker = 0x40000000,
+    LocRouteBlocker = 0x40000000,
 
     /**
      * Roof flag, used to bind NPCs to not leave the buildings they spawn in. This is a custom flag.

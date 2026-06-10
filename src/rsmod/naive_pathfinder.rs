@@ -18,7 +18,7 @@ static mut RESULT: [u32; 1] = [0; 1];
 // https://gist.github.com/Z-Kris/fe476d75a51374f12dca999700f009f7
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub(crate) unsafe fn find_naive_path(
+pub(crate) unsafe fn find_naive_path<C: CollisionStrategy>(
     flags: &CollisionFlagMap,
     y: i32,
     src_x: i32,
@@ -30,7 +30,7 @@ pub(crate) unsafe fn find_naive_path(
     dest_width: u8,
     dest_height: u8,
     extra_flag: u32,
-    collision: &CollisionStrategy,
+    collision: &C,
 ) -> &'static [u32] {
     // If we are intersecting at all, the path needs to try to move out of the way.
     if intersects(
