@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name to use for the release (e.g. v0.2.0)'
+        required: true
+        default: 'v0.0.0-beta'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Verify version matches tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "ERROR: Tag $TAG does not match Cargo.toml version $VERSION"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Publish
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Build changelog
+        id: changelog
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          PREV=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1)
+          if [ -z "$PREV" ]; then
+            RANGE="$TAG"
+          else
+            RANGE="${PREV}..${TAG}"
+          fi
+          {
+            echo 'body<<CHANGELOG_EOF'
+            echo "## What's Changed"
+            echo ""
+            git log "$RANGE" --pretty=format:"- %s" --no-merges 2>/dev/null || echo "- Initial release"
+            echo ""
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV}...${TAG}"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
