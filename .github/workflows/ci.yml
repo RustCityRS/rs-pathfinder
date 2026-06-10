@@ -12,7 +12,7 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latestF
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
