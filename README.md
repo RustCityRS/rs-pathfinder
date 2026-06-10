@@ -74,24 +74,6 @@ lib.rs (public API + global state)
       └── loc_shape.rs           23 loc shape types (walls, centrepieces, roofs, decor)
 ```
 
-## 💪 Benchmarks
-
-I have created `benchmark.rs` for synthetic examples of performance.
-They load in a full reconstruction of the Lumbridge mapsquare (64x64) tiles
-with full clipping flags set. Then in a loop it runs through 100k pathfinder
-requests to a destination +10 tiles North with a single access point to the destination.
-
-## Ran in Release mode on Windows x64 OS.
-
-```
-100k paths took: 141.7222ms; time per call: 1.417µs
-100k paths took: 141.7869ms; time per call: 1.417µs
-100k paths took: 142.1886ms; time per call: 1.421µs
-100k paths took: 142.3545ms; time per call: 1.423µs
-100k paths took: 141.6735ms; time per call: 1.416µs
-100k paths took: 142.3722ms; time per call: 1.423µs
-```
-
 ---
 
 ## Coordinate System
@@ -766,6 +748,27 @@ A benchmark binary that:
 4. Sleeps 600ms between batches (matching the game tick rate).
 
 ---
+
+## 💪 Benchmarks
+
+I have created `benchmark.rs` for synthetic examples of performance.
+They load in a full reconstruction of the Lumbridge mapsquare (64x64) tiles
+with full clipping flags set. Then in a loop it runs through 100k pathfinder
+requests to a destination +10 tiles North with a single access point to the destination.
+
+## Ran in Release mode on Windows x64 OS.
+
+```
+100k paths took: 133.4965ms; time per call: 1.334µs
+100k paths took: 134.3726ms; time per call: 1.343µs
+100k paths took: 132.8235ms; time per call: 1.328µs
+100k paths took: 132.8823ms; time per call: 1.328µs
+100k paths took: 134.2985ms; time per call: 1.342µs
+100k paths took: 133.489ms; time per call: 1.334µs
+100k paths took: 133.2397ms; time per call: 1.332µs
+100k paths took: 133.3598ms; time per call: 1.333µs
+100k paths took: 133.1242ms; time per call: 1.331µs
+```
 
 ## Dependencies
 
