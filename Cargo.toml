@@ -1,10 +1,10 @@
 [package]
 name = "rs-pathfinder"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["RustCityRS"]
 description = "A BFS pathfinder & collision system"
-license = "ISC"
+license = "MIT AND ISC"
 repository = "https://github.com/RustCityRS/rs-pathfinder"
 homepage = "https://github.com/RustCityRS/rs-pathfinder"
 readme = "README.md"
@@ -15,7 +15,7 @@ keywords = [
     "rust",
 ]
 categories = ["game-engines", "game-development"]
-include = ["src/lib.rs", "src/**/*", "LICENSE.md", "README.md"]
+include = ["src/lib.rs", "src/**/*", "LICENSE.md", "LICENSE.rsmod", "README.md"]
 
 [lib]
 name = "rsmod"
