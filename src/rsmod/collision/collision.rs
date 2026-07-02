@@ -69,9 +69,9 @@ impl CollisionFlagMap {
 
     #[inline(always)]
     unsafe fn allocate_if_absent_return(&mut self, zone_idx: usize) -> &mut [u32; 64] {
-        (*self.flags.as_mut_ptr().add(zone_idx)).get_or_insert(Box::new(
-            [CollisionFlag::Open as u32; CollisionFlagMap::ZONE_TILE_COUNT],
-        ))
+        (*self.flags.as_mut_ptr().add(zone_idx)).get_or_insert_with(|| {
+            Box::new([CollisionFlag::Open as u32; CollisionFlagMap::ZONE_TILE_COUNT])
+        })
     }
 
     #[inline(always)]
