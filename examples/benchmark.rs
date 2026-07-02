@@ -1,5 +1,5 @@
 use rsmod::rsmod::collision::collision_strategy::CollisionType;
-use rsmod::{__set, find_path};
+use rsmod::{__set, change_player, find_path};
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -40,6 +40,8 @@ fn main() {
                 25,
                 CollisionType::Normal,
             );
+            change_player(3232, 3205, 0, 1, false);
+            change_player(3232, 3205 + 10, 0, 1, true);
         }
         let end: Duration = Instant::now() - start;
         println!(
