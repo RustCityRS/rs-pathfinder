@@ -150,40 +150,35 @@ pub fn change_loc(
 }
 
 pub fn change_npc(x: u16, z: u16, y: u8, size: u8, add: bool) {
-    let mask: u32 = CollisionFlag::Npc as u32;
-    let x = x as i32;
-    let z = z as i32;
-    let y = y as i32;
-    let size = size as i32;
-    let area = size * size;
-    unsafe {
-        if add {
-            for index in 0..area {
-                COLLISION_FLAGS.add(x + (index % size), z + (index / size), y, mask);
-            }
-        } else {
-            for index in 0..area {
-                COLLISION_FLAGS.remove(x + (index % size), z + (index / size), y, mask);
-            }
-        }
-    }
+    change_entity(x, z, y, size, add, CollisionFlag::Npc as u32);
 }
 
 pub fn change_player(x: u16, z: u16, y: u8, size: u8, add: bool) {
-    let mask: u32 = CollisionFlag::Player as u32;
+    change_entity(x, z, y, size, add, CollisionFlag::Player as u32);
+}
+
+#[inline(always)]
+fn change_entity(x: u16, z: u16, y: u8, size: u8, add: bool, mask: u32) {
     let x = x as i32;
     let z = z as i32;
     let y = y as i32;
-    let size = size as i32;
-    let area = size * size;
     unsafe {
-        if add {
-            for index in 0..area {
-                COLLISION_FLAGS.add(x + (index % size), z + (index / size), y, mask);
+        if size == 1 {
+            if add {
+                COLLISION_FLAGS.add(x, z, y, mask);
+            } else {
+                COLLISION_FLAGS.remove(x, z, y, mask);
             }
-        } else {
-            for index in 0..area {
-                COLLISION_FLAGS.remove(x + (index % size), z + (index / size), y, mask);
+            return;
+        }
+        let size = size as i32;
+        for dz in 0..size {
+            for dx in 0..size {
+                if add {
+                    COLLISION_FLAGS.add(x + dx, z + dz, y, mask);
+                } else {
+                    COLLISION_FLAGS.remove(x + dx, z + dz, y, mask);
+                }
             }
         }
     }
