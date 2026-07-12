@@ -7,7 +7,7 @@ pub(crate) struct CollisionFlagMap {
 
 impl CollisionFlagMap {
     const ZONE_TILE_COUNT: usize = 8 * 8;
-    const TOTAL_ZONE_COUNT: usize = 256 * 256 * 4 * CollisionFlagMap::ZONE_TILE_COUNT;
+    pub(crate) const TOTAL_ZONE_COUNT: usize = 256 * 256 * 4 * CollisionFlagMap::ZONE_TILE_COUNT;
 
     #[inline(always)]
     pub const fn zone_index(x: i32, z: i32, y: i32) -> usize {
@@ -27,7 +27,7 @@ impl CollisionFlagMap {
     }
 
     #[inline(always)]
-    pub unsafe fn get(&self, x: i32, z: i32, y: i32) -> u32 {
+    pub const unsafe fn get(&self, x: i32, z: i32, y: i32) -> u32 {
         if let Some(ref flags) = *self
             .flags
             .as_ptr()
@@ -83,7 +83,7 @@ impl CollisionFlagMap {
     }
 
     #[inline(always)]
-    pub unsafe fn is_zone_allocated(&self, x: i32, z: i32, y: i32) -> bool {
+    pub const unsafe fn is_zone_allocated(&self, x: i32, z: i32, y: i32) -> bool {
         (*self
             .flags
             .as_ptr()
@@ -92,7 +92,7 @@ impl CollisionFlagMap {
     }
 
     #[inline(always)]
-    pub unsafe fn is_flagged(&self, x: i32, z: i32, y: i32, masks: u32) -> bool {
+    pub const unsafe fn is_flagged(&self, x: i32, z: i32, y: i32, masks: u32) -> bool {
         match &*self
             .flags
             .as_ptr()
