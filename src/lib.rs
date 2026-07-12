@@ -5,6 +5,7 @@ use once_cell::sync::Lazy;
 
 use crate::rsmod::collision::collision::CollisionFlagMap;
 use crate::rsmod::collision::collision_strategy::*;
+use crate::rsmod::collision::zone::ZoneFlagMap;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::loc_angle::LocAngle;
 use crate::rsmod::loc_shape::LocShape;
@@ -18,6 +19,13 @@ pub mod rsmod;
 // from both sync and async (pooled) pathfinding. During any async phase,
 // no writer runs — so concurrent reads are sound.
 static mut COLLISION_FLAGS: Lazy<CollisionFlagMap> = Lazy::new(CollisionFlagMap::new);
+
+// `ZONE_FLAGS` is a zone-granularity byte plane for area attributes
+// (f2p / multiway) sharing `COLLISION_FLAGS`'s zone indexing. Same safety
+// story: writes only from the single-threaded tick (seeded at startup,
+// rare runtime toggles), reads from tick and async pathfinding while no
+// writer runs.
+static mut ZONE_FLAGS: Lazy<ZoneFlagMap> = Lazy::new(ZoneFlagMap::new);
 
 // Single PathFinder for synchronous tick-thread callers (player
 // movement, script ops, interactive clicks).
@@ -503,6 +511,24 @@ pub fn is_zone_allocated(x: u16, z: u16, y: u8) -> bool {
 
 pub fn is_flagged(x: u16, z: u16, y: u8, masks: u32) -> bool {
     unsafe { COLLISION_FLAGS.is_flagged(x as i32, z as i32, y as i32, masks) }
+}
+
+/* Flags the whole 8x8 zone containing (x, z). */
+pub fn change_zone(x: u16, z: u16, y: u8, mask: u8, add: bool) {
+    unsafe {
+        ZONE_FLAGS.change_zone(x as i32, z as i32, y as i32, mask, add);
+    }
+}
+
+pub fn is_zone_flagged(x: u16, z: u16, y: u8, mask: u8) -> bool {
+    unsafe { ZONE_FLAGS.is_flagged(x as i32, z as i32, y as i32, mask) }
+}
+
+/* True if any orthogonally-adjacent tile lies in a zone carrying `mask`.
+ * Used at map load so collision extends one tile into members land
+ * bordering f2p; clamps at x=0 / z=0. */
+pub fn borders_zone_flag(x: u16, z: u16, y: u8, mask: u8) -> bool {
+    unsafe { ZONE_FLAGS.borders(x as i32, z as i32, y as i32, mask) }
 }
 
 #[allow(clippy::too_many_arguments)]
