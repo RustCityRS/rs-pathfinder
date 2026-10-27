@@ -513,6 +513,19 @@ pub fn is_flagged(x: u16, z: u16, y: u8, masks: u32) -> bool {
     unsafe { COLLISION_FLAGS.is_flagged(x as i32, z as i32, y as i32, masks) }
 }
 
+/* Prefetch hints for callers walking many entities in one tick (npc movement). Each collision
+ * lookup is two dependent loads (zone table entry, then the zone's tiles) that usually miss
+ * cache, so call `prefetch_zone` for an entity several ahead in the loop and `prefetch_tile`
+ * for one a few ahead; by the time that entity steps, both loads are cached. Pure hints: they
+ * never change any result. */
+pub fn prefetch_zone(x: u16, z: u16, y: u8) {
+    unsafe { COLLISION_FLAGS.prefetch_zone(x as i32, z as i32, y as i32) }
+}
+
+pub fn prefetch_tile(x: u16, z: u16, y: u8) {
+    unsafe { COLLISION_FLAGS.prefetch_tile(x as i32, z as i32, y as i32) }
+}
+
 /* Flags the whole 8x8 zone containing (x, z). */
 pub fn change_zone(x: u16, z: u16, y: u8, mask: u8, add: bool) {
     unsafe {
