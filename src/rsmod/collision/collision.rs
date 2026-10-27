@@ -62,6 +62,35 @@ impl CollisionFlagMap {
             .add(CollisionFlagMap::tile_index(x, z)) &= !mask;
     }
 
+    /// Hints the CPU to fetch the zone table entry for (x, z, y).
+    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
+    #[inline(always)]
+    pub unsafe fn prefetch_zone(&self, x: i32, z: i32, y: i32) {
+        #[cfg(target_arch = "x86_64")]
+        core::arch::x86_64::_mm_prefetch::<{ core::arch::x86_64::_MM_HINT_T0 }>(
+            self.flags
+                .as_ptr()
+                .add(CollisionFlagMap::zone_index(x, z, y)) as *const i8,
+        );
+    }
+
+    /// Hints the CPU to fetch the tile flags for (x, z, y). This reads the zone table entry,
+    /// so it should follow a [`Self::prefetch_zone`] for the same tile.
+    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
+    #[inline(always)]
+    pub unsafe fn prefetch_tile(&self, x: i32, z: i32, y: i32) {
+        #[cfg(target_arch = "x86_64")]
+        if let Some(ref flags) = *self
+            .flags
+            .as_ptr()
+            .add(CollisionFlagMap::zone_index(x, z, y))
+        {
+            core::arch::x86_64::_mm_prefetch::<{ core::arch::x86_64::_MM_HINT_T0 }>(
+                flags.as_ptr().add(CollisionFlagMap::tile_index(x, z)) as *const i8,
+            );
+        }
+    }
+
     #[inline(always)]
     pub unsafe fn allocate_if_absent(&mut self, x: i32, z: i32, y: i32) {
         self.allocate_if_absent_return(CollisionFlagMap::zone_index(x, z, y));
