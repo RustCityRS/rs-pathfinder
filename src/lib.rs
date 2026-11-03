@@ -41,6 +41,7 @@ static mut PATHFINDER: Lazy<PathFinder> = Lazy::new(PathFinder::new);
 /// Must only be called from the tick thread while no async pathfind
 /// phase is in progress.
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn find_path(
     y: u8,
     src_x: u16,
@@ -79,6 +80,7 @@ pub fn find_path(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn find_naive_path(
     y: u8,
     src_x: u16,
@@ -110,6 +112,7 @@ pub fn find_naive_path(
     }
 }
 
+#[inline(always)]
 pub fn change_floor(x: u16, z: u16, y: u8, add: bool) {
     unsafe {
         if add {
@@ -121,6 +124,7 @@ pub fn change_floor(x: u16, z: u16, y: u8, add: bool) {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn change_loc(
     x: u16,
     z: u16,
@@ -157,10 +161,12 @@ pub fn change_loc(
     }
 }
 
+#[inline(always)]
 pub fn change_npc(x: u16, z: u16, y: u8, size: u8, add: bool) {
     change_entity(x, z, y, size, add, CollisionFlag::Npc as u32);
 }
 
+#[inline(always)]
 pub fn change_player(x: u16, z: u16, y: u8, size: u8, add: bool) {
     change_entity(x, z, y, size, add, CollisionFlag::Player as u32);
 }
@@ -192,6 +198,7 @@ fn change_entity(x: u16, z: u16, y: u8, size: u8, add: bool, mask: u32) {
     }
 }
 
+#[inline(always)]
 pub fn change_roof(x: u16, z: u16, y: u8, add: bool) {
     unsafe {
         if add {
@@ -203,6 +210,7 @@ pub fn change_roof(x: u16, z: u16, y: u8, add: bool) {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn change_wall(
     x: u16,
     z: u16,
@@ -493,22 +501,26 @@ unsafe fn change_wall_l(
     }
 }
 
+#[inline(always)]
 pub fn allocate_if_absent(x: u16, z: u16, y: u8) {
     unsafe {
         COLLISION_FLAGS.allocate_if_absent(x as i32, z as i32, y as i32);
     }
 }
 
+#[inline(always)]
 pub fn deallocate_if_present(x: u16, z: u16, y: u8) {
     unsafe {
         COLLISION_FLAGS.deallocate_if_present(x as i32, z as i32, y as i32);
     }
 }
 
+#[inline(always)]
 pub fn is_zone_allocated(x: u16, z: u16, y: u8) -> bool {
     unsafe { COLLISION_FLAGS.is_zone_allocated(x as i32, z as i32, y as i32) }
 }
 
+#[inline(always)]
 pub fn is_flagged(x: u16, z: u16, y: u8, masks: u32) -> bool {
     unsafe { COLLISION_FLAGS.is_flagged(x as i32, z as i32, y as i32, masks) }
 }
@@ -518,21 +530,25 @@ pub fn is_flagged(x: u16, z: u16, y: u8, masks: u32) -> bool {
  * cache, so call `prefetch_zone` for an entity several ahead in the loop and `prefetch_tile`
  * for one a few ahead; by the time that entity steps, both loads are cached. Pure hints: they
  * never change any result. */
+#[inline(always)]
 pub fn prefetch_zone(x: u16, z: u16, y: u8) {
     unsafe { COLLISION_FLAGS.prefetch_zone(x as i32, z as i32, y as i32) }
 }
 
+#[inline(always)]
 pub fn prefetch_tile(x: u16, z: u16, y: u8) {
     unsafe { COLLISION_FLAGS.prefetch_tile(x as i32, z as i32, y as i32) }
 }
 
 /* Flags the whole 8x8 zone containing (x, z). */
+#[inline(always)]
 pub fn change_zone(x: u16, z: u16, y: u8, mask: u8, add: bool) {
     unsafe {
         ZONE_FLAGS.change_zone(x as i32, z as i32, y as i32, mask, add);
     }
 }
 
+#[inline(always)]
 pub fn is_zone_flagged(x: u16, z: u16, y: u8, mask: u8) -> bool {
     unsafe { ZONE_FLAGS.is_flagged(x as i32, z as i32, y as i32, mask) }
 }
@@ -540,11 +556,13 @@ pub fn is_zone_flagged(x: u16, z: u16, y: u8, mask: u8) -> bool {
 /* True if any orthogonally-adjacent tile lies in a zone carrying `mask`.
  * Used at map load so collision extends one tile into members land
  * bordering f2p; clamps at x=0 / z=0. */
+#[inline(always)]
 pub fn borders_zone_flag(x: u16, z: u16, y: u8, mask: u8) -> bool {
     unsafe { ZONE_FLAGS.borders(x as i32, z as i32, y as i32, mask) }
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn can_travel(
     y: u8,
     x: u16,
@@ -570,7 +588,63 @@ pub fn can_travel(
     }
 }
 
+#[inline(always)]
+pub fn can_travel_fast(y: u8, x: u16, z: u16, dx: i8, dz: i8, extra: u32) -> i8 {
+    let y = y as i32;
+    let x = x as i32;
+    let z = z as i32;
+    let x_dir = if dx < 0 { 3 } else { 4 };
+    let z_dir = if dz < 0 { 6 } else { 1 };
+    let x_mask = if dx < 0 {
+        CollisionFlag::BlockWest as u32
+    } else {
+        CollisionFlag::BlockEast as u32
+    } | extra;
+    let z_mask = if dz < 0 {
+        CollisionFlag::BlockSouth as u32
+    } else {
+        CollisionFlag::BlockNorth as u32
+    } | extra;
+    unsafe {
+        let flags = &*COLLISION_FLAGS;
+        if dx == 0 {
+            return if dz == 0 {
+                -1
+            } else if flags.get(x, z + dz as i32, y) & z_mask == 0 {
+                z_dir
+            } else {
+                -2
+            };
+        }
+        let x_clear = flags.get(x + dx as i32, z, y) & x_mask == 0;
+        if dz == 0 {
+            return if x_clear { x_dir } else { -2 };
+        }
+        if x_clear {
+            let (diagonal, dir) = match (dx, dz) {
+                (-1, -1) => (CollisionFlag::BlockSouthWest as u32, 5),
+                (-1, 1) => (CollisionFlag::BlockNorthWest as u32, 0),
+                (1, -1) => (CollisionFlag::BlockSouthEast as u32, 7),
+                (1, 1) => (CollisionFlag::BlockNorthEast as u32, 2),
+                _ => unreachable!(),
+            };
+            if flags.get(x + dx as i32, z + dz as i32, y) & (diagonal | extra) == 0
+                && flags.get(x, z + dz as i32, y) & z_mask == 0
+            {
+                return dir;
+            }
+            return x_dir;
+        }
+        if flags.get(x, z + dz as i32, y) & z_mask == 0 {
+            z_dir
+        } else {
+            -2
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn has_line_of_sight(
     y: u8,
     src_x: u16,
@@ -601,6 +675,7 @@ pub fn has_line_of_sight(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn has_line_of_walk(
     y: u8,
     src_x: u16,
@@ -631,6 +706,7 @@ pub fn has_line_of_walk(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn line_of_sight(
     y: u8,
     src_x: u16,
@@ -661,6 +737,7 @@ pub fn line_of_sight(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn line_of_walk(
     y: u8,
     src_x: u16,
@@ -691,6 +768,7 @@ pub fn line_of_walk(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn reached(
     y: u8,
     src_x: u16,
@@ -725,5 +803,63 @@ pub fn reached(
 pub fn __set(x: u16, z: u16, y: u8, mask: u32) {
     unsafe {
         COLLISION_FLAGS.set(x as i32, z as i32, y as i32, mask);
+    }
+}
+
+#[test]
+fn normal_one_matches_all_fallbacks() {
+    let mut seed = 0x987654321abcdefu64;
+    let mut rnd = || {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        (seed >> 32) as u32
+    };
+    for i in 0..100000 {
+        let x = [0u16, 7, 8, 63, 64, 3200, 3207, 16383, 65535][rnd() as usize % 9];
+        let z = [0u16, 7, 8, 63, 64, 3200, 3207, 16383, 65535][rnd() as usize % 9];
+        let y = (rnd() % 4) as u8;
+        for ox in -1i32..=1 {
+            for oz in -1i32..=1 {
+                __set(
+                    (x as i32 + ox) as u16,
+                    (z as i32 + oz) as u16,
+                    y,
+                    rnd() & rnd() & rnd(),
+                );
+            }
+        }
+        for dx in -1i8..=1 {
+            for dz in -1i8..=1 {
+                for extra in [0, CollisionFlag::Npc as u32, CollisionFlag::Player as u32] {
+                    let reference = if dx == 0 && dz == 0 {
+                        -1
+                    } else if can_travel(y, x, z, dx, dz, 1, extra, CollisionType::Normal) {
+                        match (dx, dz) {
+                            (-1, 1) => 0,
+                            (0, 1) => 1,
+                            (1, 1) => 2,
+                            (-1, 0) => 3,
+                            (1, 0) => 4,
+                            (-1, -1) => 5,
+                            (0, -1) => 6,
+                            (1, -1) => 7,
+                            _ => unreachable!(),
+                        }
+                    } else if dx != 0 && can_travel(y, x, z, dx, 0, 1, extra, CollisionType::Normal)
+                    {
+                        if dx < 0 { 3 } else { 4 }
+                    } else if dz != 0 && can_travel(y, x, z, 0, dz, 1, extra, CollisionType::Normal)
+                    {
+                        if dz < 0 { 6 } else { 1 }
+                    } else {
+                        -2
+                    };
+                    assert_eq!(
+                        can_travel_fast(y, x, z, dx, dz, extra),
+                        reference,
+                        "{i} {x} {z} {dx} {dz}"
+                    );
+                }
+            }
+        }
     }
 }
