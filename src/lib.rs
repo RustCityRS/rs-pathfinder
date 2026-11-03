@@ -41,6 +41,7 @@ static mut PATHFINDER: Lazy<PathFinder> = Lazy::new(PathFinder::new);
 /// Must only be called from the tick thread while no async pathfind
 /// phase is in progress.
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn find_path(
     y: u8,
     src_x: u16,
@@ -79,6 +80,7 @@ pub fn find_path(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn find_naive_path(
     y: u8,
     src_x: u16,
@@ -110,6 +112,7 @@ pub fn find_naive_path(
     }
 }
 
+#[inline(always)]
 pub fn change_floor(x: u16, z: u16, y: u8, add: bool) {
     unsafe {
         if add {
@@ -121,6 +124,7 @@ pub fn change_floor(x: u16, z: u16, y: u8, add: bool) {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn change_loc(
     x: u16,
     z: u16,
@@ -157,10 +161,12 @@ pub fn change_loc(
     }
 }
 
+#[inline(always)]
 pub fn change_npc(x: u16, z: u16, y: u8, size: u8, add: bool) {
     change_entity(x, z, y, size, add, CollisionFlag::Npc as u32);
 }
 
+#[inline(always)]
 pub fn change_player(x: u16, z: u16, y: u8, size: u8, add: bool) {
     change_entity(x, z, y, size, add, CollisionFlag::Player as u32);
 }
@@ -192,6 +198,7 @@ fn change_entity(x: u16, z: u16, y: u8, size: u8, add: bool, mask: u32) {
     }
 }
 
+#[inline(always)]
 pub fn change_roof(x: u16, z: u16, y: u8, add: bool) {
     unsafe {
         if add {
@@ -203,6 +210,7 @@ pub fn change_roof(x: u16, z: u16, y: u8, add: bool) {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn change_wall(
     x: u16,
     z: u16,
@@ -493,22 +501,26 @@ unsafe fn change_wall_l(
     }
 }
 
+#[inline(always)]
 pub fn allocate_if_absent(x: u16, z: u16, y: u8) {
     unsafe {
         COLLISION_FLAGS.allocate_if_absent(x as i32, z as i32, y as i32);
     }
 }
 
+#[inline(always)]
 pub fn deallocate_if_present(x: u16, z: u16, y: u8) {
     unsafe {
         COLLISION_FLAGS.deallocate_if_present(x as i32, z as i32, y as i32);
     }
 }
 
+#[inline(always)]
 pub fn is_zone_allocated(x: u16, z: u16, y: u8) -> bool {
     unsafe { COLLISION_FLAGS.is_zone_allocated(x as i32, z as i32, y as i32) }
 }
 
+#[inline(always)]
 pub fn is_flagged(x: u16, z: u16, y: u8, masks: u32) -> bool {
     unsafe { COLLISION_FLAGS.is_flagged(x as i32, z as i32, y as i32, masks) }
 }
@@ -518,21 +530,25 @@ pub fn is_flagged(x: u16, z: u16, y: u8, masks: u32) -> bool {
  * cache, so call `prefetch_zone` for an entity several ahead in the loop and `prefetch_tile`
  * for one a few ahead; by the time that entity steps, both loads are cached. Pure hints: they
  * never change any result. */
+#[inline(always)]
 pub fn prefetch_zone(x: u16, z: u16, y: u8) {
     unsafe { COLLISION_FLAGS.prefetch_zone(x as i32, z as i32, y as i32) }
 }
 
+#[inline(always)]
 pub fn prefetch_tile(x: u16, z: u16, y: u8) {
     unsafe { COLLISION_FLAGS.prefetch_tile(x as i32, z as i32, y as i32) }
 }
 
 /* Flags the whole 8x8 zone containing (x, z). */
+#[inline(always)]
 pub fn change_zone(x: u16, z: u16, y: u8, mask: u8, add: bool) {
     unsafe {
         ZONE_FLAGS.change_zone(x as i32, z as i32, y as i32, mask, add);
     }
 }
 
+#[inline(always)]
 pub fn is_zone_flagged(x: u16, z: u16, y: u8, mask: u8) -> bool {
     unsafe { ZONE_FLAGS.is_flagged(x as i32, z as i32, y as i32, mask) }
 }
@@ -540,11 +556,13 @@ pub fn is_zone_flagged(x: u16, z: u16, y: u8, mask: u8) -> bool {
 /* True if any orthogonally-adjacent tile lies in a zone carrying `mask`.
  * Used at map load so collision extends one tile into members land
  * bordering f2p; clamps at x=0 / z=0. */
+#[inline(always)]
 pub fn borders_zone_flag(x: u16, z: u16, y: u8, mask: u8) -> bool {
     unsafe { ZONE_FLAGS.borders(x as i32, z as i32, y as i32, mask) }
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn can_travel(
     y: u8,
     x: u16,
@@ -570,7 +588,7 @@ pub fn can_travel(
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn can_travel_fast(y: u8, x: u16, z: u16, dx: i8, dz: i8, extra: u32) -> i8 {
     let y = y as i32;
     let x = x as i32;
@@ -626,6 +644,7 @@ pub fn can_travel_fast(y: u8, x: u16, z: u16, dx: i8, dz: i8, extra: u32) -> i8 
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn has_line_of_sight(
     y: u8,
     src_x: u16,
@@ -656,6 +675,7 @@ pub fn has_line_of_sight(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn has_line_of_walk(
     y: u8,
     src_x: u16,
@@ -686,6 +706,7 @@ pub fn has_line_of_walk(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn line_of_sight(
     y: u8,
     src_x: u16,
@@ -716,6 +737,7 @@ pub fn line_of_sight(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn line_of_walk(
     y: u8,
     src_x: u16,
@@ -746,6 +768,7 @@ pub fn line_of_walk(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn reached(
     y: u8,
     src_x: u16,
