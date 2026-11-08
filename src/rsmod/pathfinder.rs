@@ -5,9 +5,12 @@ use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::flag::direction_flag::DirectionFlag;
 use crate::rsmod::reach::reach_strategy::ReachStrategy;
 use crate::rsmod::utils::rotation::rotate;
+use once_cell::sync::Lazy;
 
 #[derive(Clone)]
 pub(crate) struct PathFinder {
+    stop_tiles: [usize; 16],
+    stop_len: usize,
     directions: Vec<i8>,
     distances: Vec<i32>,
     generations: Vec<u32>,
@@ -46,6 +49,8 @@ impl PathFinder {
             buf_reader_index: 0,
             buf_writer_index: 0,
             waypoints: [0; 25],
+            stop_tiles: [0; 16],
+            stop_len: 0,
         }
     }
 
@@ -121,6 +126,44 @@ impl PathFinder {
             Self::DEFAULT_SRC_DIRECTION_VALUE,
             0,
         );
+        self.stop_len = 0;
+        if src_size == 1
+            && shape == -1
+            && dest_width == 1
+            && dest_height == 1
+            && (local_dest_x != local_src_x || local_dest_z != local_src_z)
+            && !Self::enterable(
+                flags,
+                collision,
+                base_x,
+                base_z,
+                local_dest_x,
+                local_dest_z,
+                y,
+            )
+        {
+            if !move_near {
+                return Self::EMPTY;
+            }
+            let mut lowest: i32 = -1;
+            for &(dx, dz, cost) in APPROACH_OFFSETS.iter() {
+                if lowest != -1 && cost != lowest {
+                    break;
+                }
+                let x: i32 = local_dest_x + dx;
+                let z: i32 = local_dest_z + dz;
+                if (x == local_src_x && z == local_src_z)
+                    || Self::enterable(flags, collision, base_x, base_z, x, z, y)
+                {
+                    lowest = cost;
+                    *self.stop_tiles.as_mut_ptr().add(self.stop_len) = Self::local_index(x, z);
+                    self.stop_len += 1;
+                }
+            }
+            if lowest == -1 {
+                return Self::EMPTY;
+            }
+        }
         let path_found: bool = match src_size {
             1 => self.find_path_1(
                 flags,
@@ -251,6 +294,7 @@ impl PathFinder {
         let mut clip_flag: CollisionFlag;
         let mut dir_flag: DirectionFlag;
         let relative_search_size: i32 = Self::DEFAULT_SEARCH_MAP_SIZE - 1;
+        let mut level: i32 = -1;
 
         while self.buf_writer_index != self.buf_reader_index {
             let packed = *self.valid_local.as_ptr().add(self.buf_reader_index);
@@ -277,11 +321,17 @@ impl PathFinder {
                 return true;
             }
 
-            let next_distance: i32 = *self
+            let distance: i32 = *self
                 .distances
                 .as_ptr()
-                .add(Self::local_index(self.curr_local_x, self.curr_local_z))
-                + 1;
+                .add(Self::local_index(self.curr_local_x, self.curr_local_z));
+            if distance != level {
+                level = distance;
+                if self.stop_len != 0 && self.settled() {
+                    return false;
+                }
+            }
+            let next_distance: i32 = distance + 1;
 
             /* east to west */
             x = self.curr_local_x - 1;
@@ -1204,6 +1254,52 @@ impl PathFinder {
         lowest_cost != Self::MAX_ALTERNATIVE_ROUTE_LOWEST_COST
     }
 
+    /// Whether a tile settling the closest approach point has been visited
+    /// within seek range.
+    #[inline(never)]
+    unsafe fn settled(&self) -> bool {
+        for i in 0..self.stop_len {
+            let index: usize = *self.stop_tiles.as_ptr().add(i);
+            if *self.generations.as_ptr().add(index) == self.generation
+                && *self.distances.as_ptr().add(index) < Self::MAX_ALTERNATIVE_ROUTE_SEEK_RANGE
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Whether a step from any side can end on local tile `x`, `z`.
+    #[inline(always)]
+    unsafe fn enterable<C: CollisionStrategy>(
+        flags: &CollisionFlagMap,
+        collision: &C,
+        base_x: i32,
+        base_z: i32,
+        x: i32,
+        z: i32,
+        y: i32,
+    ) -> bool {
+        if !((0..Self::DEFAULT_SEARCH_MAP_SIZE).contains(&x)
+            && (0..Self::DEFAULT_SEARCH_MAP_SIZE).contains(&z))
+        {
+            return false;
+        }
+        let flag: u32 = Self::collision_flag(flags, base_x, base_z, x, z, y);
+        [
+            CollisionFlag::BlockWest,
+            CollisionFlag::BlockEast,
+            CollisionFlag::BlockSouth,
+            CollisionFlag::BlockNorth,
+            CollisionFlag::BlockSouthWest,
+            CollisionFlag::BlockSouthEast,
+            CollisionFlag::BlockNorthWest,
+            CollisionFlag::BlockNorthEast,
+        ]
+        .iter()
+        .any(|&block| collision.can_move(flag, block as u32))
+    }
+
     #[inline(always)]
     fn local_index(x: i32, z: i32) -> usize {
         ((x << 7) | z) as usize
@@ -1244,6 +1340,22 @@ impl PathFinder {
         self.buf_writer_index = 0;
     }
 }
+
+/// The closest approach point's box around a 1x1 destination, nearest first:
+/// `(dx, dz, cost)` with cost `dx * dx + dz * dz`, the destination left out.
+static APPROACH_OFFSETS: Lazy<Vec<(i32, i32, i32)>> = Lazy::new(|| {
+    let range: i32 = PathFinder::MAX_ALTERNATIVE_ROUTE_DISTANCE_FROM_DESTINATION;
+    let mut offsets: Vec<(i32, i32, i32)> = Vec::new();
+    for dx in -range..=range {
+        for dz in -range..=range {
+            if dx != 0 || dz != 0 {
+                offsets.push((dx, dz, dx * dx + dz * dz));
+            }
+        }
+    }
+    offsets.sort_by_key(|&(_, _, cost)| cost);
+    offsets
+});
 
 #[cfg(test)]
 mod tests {

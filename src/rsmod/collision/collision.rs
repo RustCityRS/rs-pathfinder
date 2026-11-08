@@ -54,12 +54,18 @@ impl CollisionFlagMap {
             .add(CollisionFlagMap::tile_index(x, z)) |= mask;
     }
 
+    /// Clears `mask` on an allocated zone's tile. An absent zone stays absent:
+    /// allocating it here would turn the whole zone from `Null` into walkable
+    /// `Open` floor.
     #[inline(always)]
     pub unsafe fn remove(&mut self, x: i32, z: i32, y: i32, mask: u32) {
-        *self
-            .allocate_if_absent_return(CollisionFlagMap::zone_index(x, z, y))
+        if let Some(flags) = &mut *self
+            .flags
             .as_mut_ptr()
-            .add(CollisionFlagMap::tile_index(x, z)) &= !mask;
+            .add(CollisionFlagMap::zone_index(x, z, y))
+        {
+            *flags.as_mut_ptr().add(CollisionFlagMap::tile_index(x, z)) &= !mask;
+        }
     }
 
     /// Hints the CPU to fetch the zone table entry for (x, z, y).
@@ -245,6 +251,17 @@ mod tests {
 
             collision.remove(3200, 3200, 0, CollisionFlag::WallNorthProjBlocker as u32);
             assert_eq!(CollisionFlag::Open as u32, collision.get(3200, 3200, 0));
+        }
+    }
+
+    #[test]
+    fn test_collision_remove_leaves_absent_zone_absent() {
+        let mut collision: CollisionFlagMap = CollisionFlagMap::new();
+
+        unsafe {
+            collision.remove(3200, 3200, 0, CollisionFlag::Npc as u32);
+            assert_eq!(false, collision.is_zone_allocated(3200, 3200, 0));
+            assert_eq!(CollisionFlag::Null as u32, collision.get(3200, 3200, 0));
         }
     }
 
