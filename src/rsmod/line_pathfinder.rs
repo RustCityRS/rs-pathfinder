@@ -314,6 +314,7 @@ mod tests {
         let mut collision = CollisionFlagMap::new();
 
         unsafe {
+            collision.allocate_if_absent(src_x, src_z, 0);
             collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = line_of_sight(
@@ -345,6 +346,7 @@ mod tests {
         let mut collision = CollisionFlagMap::new();
 
         unsafe {
+            collision.allocate_if_absent(src_x, src_z, 0);
             collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = line_of_sight(
@@ -372,6 +374,7 @@ mod tests {
         let mut collision = CollisionFlagMap::new();
 
         unsafe {
+            collision.allocate_if_absent(src_x, src_z, 0);
             collision.add(src_x, src_z, 0, CollisionFlag::Loc as u32);
 
             let line = line_of_sight(&collision, 0, src_x, src_z, 3200, 3201, 1, 1, 0, 0, 0);
@@ -387,6 +390,7 @@ mod tests {
         let mut collision = CollisionFlagMap::new();
 
         unsafe {
+            collision.allocate_if_absent(src_x, src_z, 0);
             collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = line_of_sight(

@@ -121,17 +121,18 @@ This gives a maximum of `2048 * 2048 * 4 = 16,777,216` possible zones. Each zone
 tile_index(x, z) = (x & 0x7) | ((z & 0x7) << 3)
 ```
 
-**Lazy allocation**: Zones start as `None`. The first write to any tile in a zone allocates the full 64-entry array
-initialized to `CollisionFlag::Open` (0x0). Reading an unallocated zone returns `CollisionFlag::Null` (0x7FFFFFFF),
-which blocks all movement.
+**Lazy allocation**: Zones start as `None`. Only `allocate_if_absent` and `set` allocate a zone, its full 64-entry
+array initialized to `CollisionFlag::Open` (0x0). `add` and `remove` leave an absent zone absent, so a flag written
+next to the map never turns the void beside it into open floor. Reading an unallocated zone returns
+`CollisionFlag::Null` (0x7FFFFFFF), which blocks all movement.
 
 **Operations**:
 | Method | Behavior |
 |--------|----------|
 | `get(x, z, y)` | Returns the flag bitmask, or `Null` if zone not allocated |
 | `set(x, z, y, mask)` | Overwrites the tile flag (allocates zone if needed) |
-| `add(x, z, y, mask)` | Bitwise OR the mask onto existing flags |
-| `remove(x, z, y, mask)` | Bitwise AND-NOT the mask from existing flags |
+| `add(x, z, y, mask)` | Bitwise OR the mask onto existing flags (an absent zone stays absent) |
+| `remove(x, z, y, mask)` | Bitwise AND-NOT the mask from existing flags (an absent zone stays absent) |
 | `is_flagged(x, z, y, masks)` | Returns true if any bit in `masks` is set on the tile |
 | `allocate_if_absent(x, z, y)` | Ensures the zone exists |
 | `deallocate_if_present(x, z, y)` | Drops the zone, tiles revert to `Null` |
