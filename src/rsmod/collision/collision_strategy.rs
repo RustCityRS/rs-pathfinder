@@ -3,6 +3,7 @@
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 
 #[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum CollisionType {
     Normal = 0,
     Blocked = 1,

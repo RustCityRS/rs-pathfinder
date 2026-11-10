@@ -12,7 +12,10 @@ use crate::rsmod::loc_shape::LocShape;
 use crate::rsmod::pathfinder::PathFinder;
 use crate::rsmod::reach::reach_strategy::ReachStrategy;
 
+mod pool;
 pub mod rsmod;
+
+pub use pool::{PathJob, PathPool, PathRequest};
 
 // `COLLISION_FLAGS` is a global mutable map. Writes happen from the
 // single-threaded engine tick (loc/npc/player add/remove). Reads happen
