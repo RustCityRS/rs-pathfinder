@@ -60,9 +60,10 @@ pub fn find_path(
     block_access_flags: u8,
     max_waypoints: u8,
     collision: CollisionType,
+    route_blockers: bool,
 ) -> &'static [u32] {
     unsafe {
-        with_collision_strategy!(collision, strategy => PATHFINDER.find_path(
+        with_collision_strategy!(collision, route_blockers, strategy => PATHFINDER.find_path(
             &COLLISION_FLAGS,
             y as i32,
             src_x as i32,

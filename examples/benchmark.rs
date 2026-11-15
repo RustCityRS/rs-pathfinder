@@ -39,6 +39,7 @@ fn main() {
                 0,
                 25,
                 CollisionType::Normal,
+                false,
             );
             change_player(3232, 3205, 0, 1, false);
             change_player(3232, 3205 + 10, 0, 1, true);

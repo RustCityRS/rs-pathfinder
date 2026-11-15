@@ -27,6 +27,7 @@ pub struct PathRequest {
     pub block_access_flags: u8,
     pub max_waypoints: u8,
     pub collision: CollisionType,
+    pub route_blockers: bool,
 }
 
 impl PathRequest {
@@ -46,6 +47,7 @@ impl PathRequest {
             self.block_access_flags,
             self.max_waypoints,
             self.collision,
+            self.route_blockers,
         )
     }
 }
@@ -71,7 +73,7 @@ impl PathJob {
 
     unsafe fn find(&mut self, finder: &mut PathFinder, flags: &CollisionFlagMap) {
         let r = self.request;
-        let path = with_collision_strategy!(r.collision, strategy => finder.find_path(
+        let path = with_collision_strategy!(r.collision, r.route_blockers, strategy => finder.find_path(
             flags,
             r.y as i32,
             r.src_x as i32,
