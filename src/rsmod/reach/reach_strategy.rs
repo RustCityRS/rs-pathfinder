@@ -1,13 +1,13 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::loc_angle::LocAngle;
 use crate::rsmod::loc_shape::LocShape;
-use crate::rsmod::reach::rectangle_boundary::{collides, reach_rectangle_1, reach_rectangle_n};
+use crate::rsmod::reach::rectangle_boundary::{test_adjacent_edge, test_loc_1, test_overlap};
 use crate::rsmod::utils::rotation::{rotate, rotate_flags};
 
-pub(crate) struct ReachStrategy;
+pub(crate) struct RouteDestination;
 
-impl ReachStrategy {
+impl RouteDestination {
     const WALL_STRATEGY: i32 = 0;
     const WALL_DECOR_STRATEGY: i32 = 1;
     const RECTANGLE_STRATEGY: i32 = 2;
@@ -17,17 +17,17 @@ impl ReachStrategy {
     #[inline(always)]
     const fn exit_strategy(shape: i8) -> i32 {
         if shape == -2 {
-            return ReachStrategy::RECTANGLE_EXCLUSIVE_STRATEGY;
+            return RouteDestination::RECTANGLE_EXCLUSIVE_STRATEGY;
         } else if shape == -1 {
-            return ReachStrategy::NO_STRATEGY;
-        } else if (shape >= 0 && shape <= 3) || shape == 9 {
-            return ReachStrategy::WALL_STRATEGY;
-        } else if shape < 9 {
-            return ReachStrategy::WALL_DECOR_STRATEGY;
-        } else if (shape >= 10 && shape <= 11) || shape == 22 {
-            return ReachStrategy::RECTANGLE_STRATEGY;
+            return RouteDestination::NO_STRATEGY;
+        } else if LocShape::is_wall_shape(shape) {
+            return RouteDestination::WALL_STRATEGY;
+        } else if LocShape::is_wall_decor_shape(shape) {
+            return RouteDestination::WALL_DECOR_STRATEGY;
+        } else if LocShape::is_centre_piece_shape(shape) || LocShape::is_ground_decor_shape(shape) {
+            return RouteDestination::RECTANGLE_STRATEGY;
         }
-        ReachStrategy::NO_STRATEGY
+        RouteDestination::NO_STRATEGY
     }
 
     #[inline(always)]
@@ -37,8 +37,8 @@ impl ReachStrategy {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    pub(crate) unsafe fn reached(
-        flags: &CollisionFlagMap,
+    pub(crate) unsafe fn has_arrived(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -51,21 +51,21 @@ impl ReachStrategy {
         shape: i8,
         block_access_flags: u8,
     ) -> bool {
-        let exit_strategy: i32 = ReachStrategy::exit_strategy(shape);
-        if exit_strategy != ReachStrategy::RECTANGLE_EXCLUSIVE_STRATEGY
+        let exit_strategy: i32 = RouteDestination::exit_strategy(shape);
+        if exit_strategy != RouteDestination::RECTANGLE_EXCLUSIVE_STRATEGY
             && src_x == dest_x
             && src_z == dest_z
         {
             return true;
         }
         match exit_strategy {
-            ReachStrategy::WALL_STRATEGY => ReachStrategy::reach_wall(
+            RouteDestination::WALL_STRATEGY => RouteDestination::test_wall(
                 flags, y, src_x, src_z, dest_x, dest_z, src_size, shape, angle,
             ),
-            ReachStrategy::WALL_DECOR_STRATEGY => ReachStrategy::reach_wall_decor(
+            RouteDestination::WALL_DECOR_STRATEGY => RouteDestination::test_wdecor(
                 flags, y, src_x, src_z, dest_x, dest_z, src_size, shape, angle,
             ),
-            ReachStrategy::RECTANGLE_STRATEGY => ReachStrategy::reach_rectangle(
+            RouteDestination::RECTANGLE_STRATEGY => RouteDestination::test_loc(
                 flags,
                 y,
                 src_x,
@@ -78,29 +78,27 @@ impl ReachStrategy {
                 angle,
                 block_access_flags,
             ),
-            ReachStrategy::RECTANGLE_EXCLUSIVE_STRATEGY => {
-                ReachStrategy::reach_exclusive_rectangle(
-                    flags,
-                    y,
-                    src_x,
-                    src_z,
-                    dest_x,
-                    dest_z,
-                    src_size,
-                    dest_width,
-                    dest_height,
-                    angle,
-                    block_access_flags,
-                )
-            }
+            RouteDestination::RECTANGLE_EXCLUSIVE_STRATEGY => RouteDestination::test_loc_exclusive(
+                flags,
+                y,
+                src_x,
+                src_z,
+                dest_x,
+                dest_z,
+                src_size,
+                dest_width,
+                dest_height,
+                angle,
+                block_access_flags,
+            ),
             _ => false,
         }
     }
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_rectangle(
-        flags: &CollisionFlagMap,
+    unsafe fn test_loc(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -116,7 +114,7 @@ impl ReachStrategy {
         let rotated_height: u8 = rotate(angle, dest_height, dest_width);
         let rotated_block_access: u8 = rotate_flags(angle, block_access_flags);
 
-        let collides: bool = collides(
+        let collides: bool = test_overlap(
             src_x,
             src_z,
             dest_x,
@@ -130,7 +128,7 @@ impl ReachStrategy {
         match src_size {
             1 => {
                 collides
-                    || reach_rectangle_1(
+                    || test_loc_1(
                         flags,
                         y,
                         src_x,
@@ -144,7 +142,7 @@ impl ReachStrategy {
             }
             _ => {
                 collides
-                    || reach_rectangle_n(
+                    || test_adjacent_edge(
                         flags,
                         y,
                         src_x,
@@ -163,8 +161,8 @@ impl ReachStrategy {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_exclusive_rectangle(
-        flags: &CollisionFlagMap,
+    unsafe fn test_loc_exclusive(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -180,7 +178,7 @@ impl ReachStrategy {
         let rotated_height: u8 = rotate(angle, dest_height, dest_width);
         let rotated_block_access: u8 = rotate_flags(angle, block_access_flags);
 
-        let collides: bool = collides(
+        let collides: bool = test_overlap(
             src_x,
             src_z,
             dest_x,
@@ -194,7 +192,7 @@ impl ReachStrategy {
         match src_size {
             1 => {
                 !collides
-                    && reach_rectangle_1(
+                    && test_loc_1(
                         flags,
                         y,
                         src_x,
@@ -208,7 +206,7 @@ impl ReachStrategy {
             }
             _ => {
                 !collides
-                    && reach_rectangle_n(
+                    && test_adjacent_edge(
                         flags,
                         y,
                         src_x,
@@ -227,8 +225,8 @@ impl ReachStrategy {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_wall(
-        flags: &CollisionFlagMap,
+    unsafe fn test_wall(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -247,19 +245,19 @@ impl ReachStrategy {
         {
             return true;
         } else if src_size == 1 {
-            return ReachStrategy::reach_wall_1(
+            return RouteDestination::test_wall_1(
                 flags, y, src_x, src_z, dest_x, dest_z, shape, angle,
             );
         }
-        ReachStrategy::reach_wall_n(
+        RouteDestination::test_wall_n(
             flags, y, src_x, src_z, dest_x, dest_z, src_size, shape, angle,
         )
     }
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_wall_decor(
-        flags: &CollisionFlagMap,
+    unsafe fn test_wdecor(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -278,19 +276,19 @@ impl ReachStrategy {
         {
             return true;
         } else if src_size == 1 {
-            return ReachStrategy::reach_wall_decor_1(
+            return RouteDestination::test_wdecor_1(
                 flags, y, src_x, src_z, dest_x, dest_z, shape, angle,
             );
         }
-        ReachStrategy::reach_wall_decor_n(
+        RouteDestination::test_wdecor_n(
             flags, y, src_x, src_z, dest_x, dest_z, src_size, shape, angle,
         )
     }
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_wall_1(
-        flags: &CollisionFlagMap,
+    unsafe fn test_wall_1(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -421,8 +419,8 @@ impl ReachStrategy {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_wall_n(
-        flags: &CollisionFlagMap,
+    unsafe fn test_wall_n(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -576,8 +574,8 @@ impl ReachStrategy {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_wall_decor_1(
-        flags: &CollisionFlagMap,
+    unsafe fn test_wdecor_1(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -590,7 +588,7 @@ impl ReachStrategy {
         if shape == LocShape::WallDecorDiagonalOffset
             || shape == LocShape::WallDecorDiagonalNoOffset
         {
-            return match LocAngle::from(ReachStrategy::altered_rotation(angle, shape)) {
+            return match LocAngle::from(RouteDestination::altered_rotation(angle, shape)) {
                 LocAngle::West => {
                     (src_x == dest_x + 1
                         && src_z == dest_z
@@ -655,8 +653,8 @@ impl ReachStrategy {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn reach_wall_decor_n(
-        flags: &CollisionFlagMap,
+    unsafe fn test_wdecor_n(
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -672,7 +670,7 @@ impl ReachStrategy {
         if shape == LocShape::WallDecorDiagonalOffset
             || shape == LocShape::WallDecorDiagonalNoOffset
         {
-            return match LocAngle::from(ReachStrategy::altered_rotation(angle, shape)) {
+            return match LocAngle::from(RouteDestination::altered_rotation(angle, shape)) {
                 LocAngle::West => {
                     (src_x == dest_x + 1
                         && src_z <= dest_z
@@ -750,10 +748,10 @@ impl ReachStrategy {
 
 #[cfg(test)]
 mod tests {
-    use crate::rsmod::collision::collision::CollisionFlagMap;
+    use crate::rsmod::collision::collision::CollisionMap;
     use crate::rsmod::flag::block_flag::BlockAccessFlag;
     use crate::rsmod::flag::collision_flag::CollisionFlag;
-    use crate::rsmod::reach::reach_strategy::ReachStrategy;
+    use crate::rsmod::reach::reach_strategy::RouteDestination;
 
     const ARGS: [[i32; 4]; 9] = [
         [3203, 3203, 1, 1],
@@ -767,8 +765,8 @@ mod tests {
         [3203, 3203, 3, 3],
     ];
 
-    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionFlagMap {
-        let mut collision = CollisionFlagMap::new();
+    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionMap {
+        let mut collision = CollisionMap::new();
         for y in 0..4 {
             for z in z1.min(z2)..=z1.max(z2) {
                 for x in x1.min(x2)..=x1.max(x2) {
@@ -780,7 +778,7 @@ mod tests {
     }
 
     unsafe fn flag(
-        flags: &mut CollisionFlagMap,
+        flags: &mut CollisionMap,
         base_x: i32,
         base_z: i32,
         width: i32,
@@ -797,7 +795,7 @@ mod tests {
     }
 
     /**
-     * Test that object rotations are taken into account within [ReachStrategy.reached]
+     * Test that object rotations are taken into account within [RouteDestination.has_arrived]
      * and do not rely on external modifications. For example, given the parameters of
      * an object in coordinates (3203, 3203) with a dimension of 3 x 1 (width x height),
      * the following test should pass:
@@ -816,7 +814,7 @@ mod tests {
      * Where:
      * - Area starts from bottom-left and makes its way to top-right. (3200,3200 - 3207,3207)
      * - ' ' (whitespace) are the tiles occupied by the rotated object.
-     * - 'o' are the tiles that successfully pass [ReachStrategy.reached].
+     * - 'o' are the tiles that successfully pass [RouteDestination.has_arrived].
      * - '-' represents every other tile in the area. (in this case a zone, or 8x8 tile area)
      */
     #[test]
@@ -839,7 +837,7 @@ mod tests {
                 );
 
                 let reached = |src_x: i32, src_z: i32, rot: u8, block_access_flags: u8| -> bool {
-                    ReachStrategy::reached(
+                    RouteDestination::has_arrived(
                         &collision,
                         0,
                         src_x,
@@ -929,7 +927,7 @@ mod tests {
     }
 
     /**
-     * Test that object rotations are taken into account within [ReachStrategy.reached]
+     * Test that object rotations are taken into account within [RouteDestination.has_arrived]
      * and do not rely on external modifications. For example, given the parameters of
      * an object in coordinates (3203, 3203) with a dimension of 3 x 1 (width x height),
      * the following test should pass:
@@ -948,7 +946,7 @@ mod tests {
      * Where:
      * - Area starts from bottom-left and makes its way to top-right. (3200,3200 - 3207,3207)
      * - ' ' (whitespace) are the tiles occupied by the rotated object.
-     * - 'o' are the tiles that successfully pass [ReachStrategy.reached].
+     * - 'o' are the tiles that successfully pass [RouteDestination.has_arrived].
      * - '-' represents every other tile in the area. (in this case a zone, or 8x8 tile area)
      */
     #[test]
@@ -971,7 +969,7 @@ mod tests {
                 );
 
                 let reached = |src_x: i32, src_z: i32, rot: u8, block_access_flags: u8| -> bool {
-                    ReachStrategy::reached(
+                    RouteDestination::has_arrived(
                         &collision,
                         0,
                         src_x,
@@ -1128,7 +1126,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALLDECOR_DIAGONAL_OFFSET_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1145,7 +1143,7 @@ mod tests {
                 assert!(!reached);
 
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, CollisionFlag::Open as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1176,7 +1174,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALLDECOR_DIAGONAL_OFFSET_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1186,14 +1184,14 @@ mod tests {
                     1,
                     1,
                     1,
-                    ReachStrategy::altered_rotation(rotation as u8, 7),
+                    RouteDestination::altered_rotation(rotation as u8, 7),
                     7,
                     0,
                 );
                 assert!(!reached);
 
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, CollisionFlag::Open as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1203,7 +1201,7 @@ mod tests {
                     1,
                     1,
                     1,
-                    ReachStrategy::altered_rotation(rotation as u8, 7),
+                    RouteDestination::altered_rotation(rotation as u8, 7),
                     7,
                     0,
                 );
@@ -1224,7 +1222,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALLDECOR_DIAGONAL_OFFSET_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1241,7 +1239,7 @@ mod tests {
                 assert!(!reached);
 
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, CollisionFlag::Open as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1272,7 +1270,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALL_STRAIGHT_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     obj_x + dir_x,
@@ -1288,7 +1286,7 @@ mod tests {
                 );
                 assert!(!reached);
 
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     obj_x,
@@ -1304,7 +1302,7 @@ mod tests {
                 );
                 assert!(reached);
 
-                collision.remove(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
+                collision.rem_cmap(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
             }
         }
     }
@@ -1321,7 +1319,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALL_L_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     obj_x + dir_x,
@@ -1337,7 +1335,7 @@ mod tests {
                 );
                 assert!(!reached);
 
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     obj_x,
@@ -1353,7 +1351,7 @@ mod tests {
                 );
                 assert!(reached);
 
-                collision.remove(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
+                collision.rem_cmap(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
             }
         }
     }
@@ -1370,7 +1368,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALL_STRAIGHT_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     obj_x + dir_x,
@@ -1386,7 +1384,7 @@ mod tests {
                 );
                 assert!(!reached);
 
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     obj_x,
@@ -1402,7 +1400,7 @@ mod tests {
                 );
                 assert!(reached);
 
-                collision.remove(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
+                collision.rem_cmap(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
             }
         }
     }
@@ -1419,7 +1417,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALL_STRAIGHT_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1436,7 +1434,7 @@ mod tests {
                 assert!(!reached);
 
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, CollisionFlag::Open as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1452,7 +1450,7 @@ mod tests {
                 );
                 assert!(reached);
 
-                collision.remove(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
+                collision.rem_cmap(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
             }
         }
     }
@@ -1469,7 +1467,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALL_L_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1486,7 +1484,7 @@ mod tests {
                 assert!(!reached);
 
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, CollisionFlag::Open as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1502,7 +1500,7 @@ mod tests {
                 );
                 assert!(reached);
 
-                collision.remove(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
+                collision.rem_cmap(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
             }
         }
     }
@@ -1519,7 +1517,7 @@ mod tests {
 
             for [rotation, dir_x, dir_z, flag] in WALL_STRAIGHT_STRATEGY_TEST_ARGS {
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1536,7 +1534,7 @@ mod tests {
                 assert!(!reached);
 
                 collision.set(obj_x + dir_x, obj_z + dir_z, 0, CollisionFlag::Open as u32);
-                let reached = ReachStrategy::reached(
+                let reached = RouteDestination::has_arrived(
                     &collision,
                     0,
                     src_x + dir_x,
@@ -1552,7 +1550,7 @@ mod tests {
                 );
                 assert!(reached);
 
-                collision.remove(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
+                collision.rem_cmap(obj_x + dir_x, obj_z + dir_z, 0, flag as u32);
             }
         }
     }
@@ -1569,49 +1567,49 @@ mod tests {
 
             // test blocked north
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorth as u32);
-            assert!(!ReachStrategy::reached(
+            assert!(!RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free east
             collision.set(src_x, src_z, 0, CollisionFlag::WallEast as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free south
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouth as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free west
             collision.set(src_x, src_z, 0, CollisionFlag::WallWest as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free northwest
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorthWest as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free northeast
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorthEast as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free southeast
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouthEast as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
 
             // test free southwest
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouthWest as u32);
-            assert!(ReachStrategy::reached(
+            assert!(RouteDestination::has_arrived(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 10, 0
             ));
         }
@@ -1629,49 +1627,49 @@ mod tests {
 
             // test blocked north
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorth as u32);
-            assert!(!ReachStrategy::reach_rectangle(
+            assert!(!RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free east
             collision.set(src_x, src_z, 0, CollisionFlag::WallEast as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free south
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouth as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free west
             collision.set(src_x, src_z, 0, CollisionFlag::WallWest as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free northwest
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorthWest as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free northeast
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorthEast as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free southeast
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouthEast as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
 
             // test free southwest
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouthWest as u32);
-            assert!(ReachStrategy::reach_rectangle(
+            assert!(RouteDestination::test_loc(
                 &collision, 0, src_x, src_z, obj_x, obj_z, 1, 1, 1, 0, 0
             ));
         }
@@ -1694,7 +1692,7 @@ mod tests {
                     let src_z = obj_z + dz;
                     collision.allocate_if_absent(src_x, src_z, 0);
 
-                    let reached = ReachStrategy::reach_rectangle(
+                    let reached = RouteDestination::test_loc(
                         &collision,
                         0,
                         src_x,
@@ -1735,7 +1733,7 @@ mod tests {
                     let src_z = obj_z + dz;
                     collision.allocate_if_absent(src_x, src_z, 0);
 
-                    let reached = ReachStrategy::reach_exclusive_rectangle(
+                    let reached = RouteDestination::test_loc_exclusive(
                         &collision,
                         0,
                         src_x,
@@ -1777,7 +1775,7 @@ mod tests {
                     CollisionFlag::Loc,
                 );
 
-                let reached1 = ReachStrategy::reach_rectangle(
+                let reached1 = RouteDestination::test_loc(
                     &collision,
                     0,
                     obj_x - 2,
@@ -1792,7 +1790,7 @@ mod tests {
                 );
                 assert!(!reached1);
 
-                let reached2 = ReachStrategy::reach_rectangle(
+                let reached2 = RouteDestination::test_loc(
                     &collision,
                     0,
                     obj_x - 1,
@@ -1809,7 +1807,7 @@ mod tests {
 
                 for x in -1..width + 1 {
                     for z in -1..height + 1 {
-                        let reached3 = ReachStrategy::reach_rectangle(
+                        let reached3 = RouteDestination::test_loc(
                             &collision,
                             0,
                             obj_x + x,
@@ -1856,7 +1854,7 @@ mod tests {
                     CollisionFlag::Loc,
                 );
 
-                let reached1 = ReachStrategy::reach_exclusive_rectangle(
+                let reached1 = RouteDestination::test_loc_exclusive(
                     &collision,
                     0,
                     obj_x - 2,
@@ -1871,7 +1869,7 @@ mod tests {
                 );
                 assert!(!reached1);
 
-                let reached2 = ReachStrategy::reach_exclusive_rectangle(
+                let reached2 = RouteDestination::test_loc_exclusive(
                     &collision,
                     0,
                     obj_x - 1,
@@ -1888,7 +1886,7 @@ mod tests {
 
                 for x in -1..width + 1 {
                     for z in -1..height + 1 {
-                        let reached3 = ReachStrategy::reach_exclusive_rectangle(
+                        let reached3 = RouteDestination::test_loc_exclusive(
                             &collision,
                             0,
                             obj_x + x,

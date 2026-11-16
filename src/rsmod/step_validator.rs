@@ -1,11 +1,11 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::collision::collision_strategy::CollisionStrategy;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) unsafe fn can_travel<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -30,7 +30,7 @@ pub(crate) unsafe fn can_travel<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_south<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -77,7 +77,7 @@ unsafe fn is_blocked_south<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_north<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -124,7 +124,7 @@ unsafe fn is_blocked_north<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_west<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -171,7 +171,7 @@ unsafe fn is_blocked_west<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_east<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -218,7 +218,7 @@ unsafe fn is_blocked_east<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_southwest<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -276,7 +276,7 @@ unsafe fn is_blocked_southwest<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_northwest<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -334,7 +334,7 @@ unsafe fn is_blocked_northwest<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_southeast<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -392,7 +392,7 @@ unsafe fn is_blocked_southeast<C: CollisionStrategy>(
 
 #[inline(always)]
 unsafe fn is_blocked_northeast<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     x: i32,
     z: i32,
@@ -450,7 +450,7 @@ unsafe fn is_blocked_northeast<C: CollisionStrategy>(
 
 #[cfg(test)]
 mod tests {
-    use crate::rsmod::collision::collision::CollisionFlagMap;
+    use crate::rsmod::collision::collision::CollisionMap;
     use crate::rsmod::collision::collision_strategy::{
         Blocked, Indoors, LineOfSight, Normal, Outdoors,
     };
@@ -484,8 +484,8 @@ mod tests {
         [3, 1, 1],
     ];
 
-    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionFlagMap {
-        let mut collision = CollisionFlagMap::new();
+    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionMap {
+        let mut collision = CollisionMap::new();
         for y in 0..4 {
             for z in z1.min(z2)..=z1.max(z2) {
                 for x in x1.min(x2)..=x1.max(x2) {
@@ -493,7 +493,7 @@ mod tests {
                 }
             }
         }
-        return collision;
+        collision
     }
 
     unsafe fn build_collision_map_with_flag(
@@ -502,8 +502,8 @@ mod tests {
         x2: i32,
         z2: i32,
         mask: CollisionFlag,
-    ) -> CollisionFlagMap {
-        let mut collision = CollisionFlagMap::new();
+    ) -> CollisionMap {
+        let mut collision = CollisionMap::new();
         for y in 0..4 {
             for z in z1.min(z2)..=z1.max(z2) {
                 for x in x1.min(x2)..=x1.max(x2) {
@@ -511,7 +511,7 @@ mod tests {
                 }
             }
         }
-        return collision;
+        collision
     }
 
     #[test]
@@ -638,7 +638,7 @@ mod tests {
                     src_z,
                     dest_x,
                     dest_z,
-                    CollisionFlag::Floor,
+                    CollisionFlag::Ground,
                 );
                 for y in 0..4 {
                     let step = can_travel(
@@ -668,7 +668,7 @@ mod tests {
             let outdoors_x = dest_x + dir_x;
             let outdoors_z = dest_z + dir_z;
 
-            let mut collision = CollisionFlagMap::new();
+            let mut collision = CollisionMap::new();
 
             unsafe {
                 for y in 0..4 {
@@ -726,7 +726,7 @@ mod tests {
             let indoors_x = dest_x + dir_x;
             let indoors_z = dest_z + dir_z;
 
-            let mut collision = CollisionFlagMap::new();
+            let mut collision = CollisionMap::new();
 
             unsafe {
                 for y in 0..4 {
@@ -783,7 +783,7 @@ mod tests {
             let blocked_x = dest_x + dir_x;
             let blocked_z = dest_z + dir_z;
 
-            let mut collision = CollisionFlagMap::new();
+            let mut collision = CollisionMap::new();
 
             unsafe {
                 for y in 0..4 {
@@ -845,7 +845,7 @@ mod tests {
             let blocked_x = dest_x + dir_x;
             let blocked_z = dest_z + dir_z;
 
-            let mut collision = CollisionFlagMap::new();
+            let mut collision = CollisionMap::new();
 
             unsafe {
                 for y in 0..4 {

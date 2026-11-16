@@ -31,6 +31,28 @@ pub(crate) enum LocShape {
     GroundDecor = 22,
 }
 
+impl LocShape {
+    #[inline(always)]
+    pub(crate) const fn is_wall_shape(shape: i8) -> bool {
+        (shape >= 0 && shape <= 3) || shape == 9
+    }
+
+    #[inline(always)]
+    pub(crate) const fn is_wall_decor_shape(shape: i8) -> bool {
+        shape >= 4 && shape <= 8
+    }
+
+    #[inline(always)]
+    pub(crate) const fn is_centre_piece_shape(shape: i8) -> bool {
+        shape == 10 || shape == 11
+    }
+
+    #[inline(always)]
+    pub(crate) const fn is_ground_decor_shape(shape: i8) -> bool {
+        shape == 22
+    }
+}
+
 impl From<i8> for LocShape {
     #[inline(always)]
     fn from(value: i8) -> LocShape {

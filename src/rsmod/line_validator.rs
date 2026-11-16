@@ -1,10 +1,10 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::line::Line;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) unsafe fn has_line_of_sight(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -40,7 +40,7 @@ pub(crate) unsafe fn has_line_of_sight(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) unsafe fn has_line_of_walk(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -76,7 +76,7 @@ pub(crate) unsafe fn has_line_of_walk(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 unsafe fn ray_cast_line(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -181,14 +181,14 @@ unsafe fn ray_cast_line(
 
 #[cfg(test)]
 mod tests {
-    use crate::rsmod::collision::collision::CollisionFlagMap;
+    use crate::rsmod::collision::collision::CollisionMap;
     use crate::rsmod::flag::collision_flag::CollisionFlag;
     use crate::rsmod::line_validator::{has_line_of_sight, has_line_of_walk};
 
     const ARGS: [[i32; 2]; 4] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 
-    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionFlagMap {
-        let mut collision = CollisionFlagMap::new();
+    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionMap {
+        let mut collision = CollisionMap::new();
         for y in 0..4 {
             for z in z1.min(z2)..=z1.max(z2) {
                 for x in x1.min(x2)..=x1.max(x2) {
@@ -204,7 +204,7 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(3200, 3205, 0, CollisionFlag::Loc as u32);
@@ -293,11 +293,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = has_line_of_sight(
                 &collision,
@@ -321,11 +321,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = has_line_of_sight(
                 &collision,
@@ -349,11 +349,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Loc as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Loc as u32);
 
             let line = has_line_of_sight(&collision, 0, src_x, src_z, 3200, 3201, 1, 1, 0, 0, 0);
             assert!(!line);
@@ -365,11 +365,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = has_line_of_sight(
                 &collision,
@@ -393,7 +393,7 @@ mod tests {
     //     let src_x = 3200;
     //     let src_z = 3200;
     //
-    //     let mut collision = CollisionFlagMap::new();
+    //     let mut collision = CollisionMap::new();
     //
     //     unsafe {
     //         collision.allocate_if_absent(src_x, src_z, 0);
@@ -408,7 +408,7 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(3200, 3205, 0, CollisionFlag::LocProjBlocker as u32);
@@ -422,9 +422,9 @@ mod tests {
     fn test_has_los_valid_line_of_sight() {
         let flags = [
             CollisionFlag::Open as u32,
-            CollisionFlag::Floor as u32,
-            CollisionFlag::FloorDecoration as u32,
-            CollisionFlag::Floor as u32 | CollisionFlag::FloorDecoration as u32,
+            CollisionFlag::Ground as u32,
+            CollisionFlag::GroundDecor as u32,
+            CollisionFlag::Ground as u32 | CollisionFlag::GroundDecor as u32,
         ];
 
         for [dir_x, dir_z] in ARGS {

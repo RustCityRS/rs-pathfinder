@@ -1,6 +1,6 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::collision::collision_strategy::CollisionType;
-use crate::rsmod::pathfinder::PathFinder;
+use crate::rsmod::pathfinder::RouteFinding;
 use crate::{COLLISION_FLAGS, PATHFINDER, with_collision_strategy};
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::io;
 
 thread_local! {
-    static FINDER: RefCell<PathFinder> = RefCell::new(PathFinder::new());
+    static FINDER: RefCell<RouteFinding> = RefCell::new(RouteFinding::new());
 }
 
 #[derive(Clone, Copy)]
@@ -31,8 +31,8 @@ pub struct PathRequest {
 }
 
 impl PathRequest {
-    pub fn find_path(&self) -> &'static [u32] {
-        crate::find_path(
+    pub fn find_route(&self) -> &'static [u32] {
+        crate::find_route(
             self.y,
             self.src_x,
             self.src_z,
@@ -71,9 +71,9 @@ impl PathJob {
         &self.waypoints[..self.len]
     }
 
-    unsafe fn find(&mut self, finder: &mut PathFinder, flags: &CollisionFlagMap) {
+    unsafe fn find(&mut self, finder: &mut RouteFinding, flags: &CollisionMap) {
         let r = self.request;
-        let path = with_collision_strategy!(r.collision, r.route_blockers, strategy => finder.find_path(
+        let path = with_collision_strategy!(r.collision, r.route_blockers, strategy => finder.find_route(
             flags,
             r.y as i32,
             r.src_x as i32,

@@ -1,29 +1,29 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::collision::collision_strategy::CollisionStrategy;
 use crate::rsmod::coord_grid::CoordGrid;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::flag::direction_flag::DirectionFlag;
-use crate::rsmod::reach::reach_strategy::ReachStrategy;
+use crate::rsmod::reach::reach_strategy::RouteDestination;
 use crate::rsmod::utils::rotation::rotate;
 use once_cell::sync::Lazy;
 
 #[derive(Clone)]
-pub(crate) struct PathFinder {
+pub(crate) struct RouteFinding {
     stop_tiles: [usize; 16],
     stop_len: usize,
-    directions: Vec<i8>,
-    distances: Vec<i32>,
+    dir_map: Vec<i8>,
+    dist_map: Vec<i32>,
     generations: Vec<u32>,
     generation: u32,
     valid_local: Vec<u32>,
-    curr_local_x: i32,
-    curr_local_z: i32,
+    route_x: i32,
+    route_z: i32,
     buf_reader_index: usize,
     buf_writer_index: usize,
     waypoints: [u32; 25],
 }
 
-impl PathFinder {
+impl RouteFinding {
     const DEFAULT_SEARCH_MAP_SIZE: i32 = 128;
     const DEFAULT_RING_BUFFER_SIZE: i32 = 4096;
     const DEFAULT_DISTANCE_VALUE: i32 = 99_999_999;
@@ -37,15 +37,15 @@ impl PathFinder {
     const EMPTY: &[u32] = &[];
 
     #[inline(always)]
-    pub fn new() -> PathFinder {
-        PathFinder {
-            directions: vec![0; Self::MAP_SIZE as usize],
-            distances: vec![Self::DEFAULT_DISTANCE_VALUE; Self::MAP_SIZE as usize],
+    pub fn new() -> RouteFinding {
+        RouteFinding {
+            dir_map: vec![0; Self::MAP_SIZE as usize],
+            dist_map: vec![Self::DEFAULT_DISTANCE_VALUE; Self::MAP_SIZE as usize],
             generations: vec![0; Self::MAP_SIZE as usize],
             generation: 1,
             valid_local: vec![0; Self::DEFAULT_RING_BUFFER_SIZE as usize],
-            curr_local_x: 0,
-            curr_local_z: 0,
+            route_x: 0,
+            route_z: 0,
             buf_reader_index: 0,
             buf_writer_index: 0,
             waypoints: [0; 25],
@@ -56,9 +56,9 @@ impl PathFinder {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    pub unsafe fn find_path<C: CollisionStrategy>(
+    pub unsafe fn find_route<C: CollisionStrategy>(
         &mut self,
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -75,7 +75,7 @@ impl PathFinder {
         collision: &C,
     ) -> &[u32] {
         self.reset();
-        self.find_path_inner(
+        self.find_route_inner(
             flags,
             y,
             src_x,
@@ -96,9 +96,9 @@ impl PathFinder {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn find_path_inner<C: CollisionStrategy>(
+    unsafe fn find_route_inner<C: CollisionStrategy>(
         &mut self,
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         y: i32,
         src_x: i32,
         src_z: i32,
@@ -165,7 +165,7 @@ impl PathFinder {
             }
         }
         let path_found: bool = match src_size {
-            1 => self.find_path_1(
+            1 => self.route_find_size1(
                 flags,
                 base_x,
                 base_z,
@@ -180,7 +180,7 @@ impl PathFinder {
                 block_access_flags,
                 collision,
             ),
-            2 => self.find_path_2(
+            2 => self.route_find_size2(
                 flags,
                 base_x,
                 base_z,
@@ -195,7 +195,7 @@ impl PathFinder {
                 block_access_flags,
                 collision,
             ),
-            _ => self.find_path_n(
+            _ => self.route_find_big(
                 flags,
                 base_x,
                 base_z,
@@ -231,37 +231,37 @@ impl PathFinder {
         let mut wp_len: usize = 0;
 
         let mut next: i8 = *self
-            .directions
+            .dir_map
             .as_ptr()
-            .add(Self::local_index(self.curr_local_x, self.curr_local_z));
+            .add(Self::local_index(self.route_x, self.route_z));
         let mut curr: i8 = -1;
 
         for _ in 0..Self::MAP_SIZE {
-            if self.curr_local_x == local_src_x && self.curr_local_z == local_src_z {
+            if self.route_x == local_src_x && self.route_z == local_src_z {
                 break;
             }
             if curr != next {
                 curr = next;
                 if wp_len < limit {
                     self.waypoints[wp_len] =
-                        CoordGrid::new(y, base_x + self.curr_local_x, base_z + self.curr_local_z).0;
+                        CoordGrid::new(y, base_x + self.route_x, base_z + self.route_z).0;
                     wp_len += 1;
                 }
             }
             if curr & DirectionFlag::East as i8 != 0 {
-                self.curr_local_x += 1;
+                self.route_x += 1;
             } else if curr & DirectionFlag::West as i8 != 0 {
-                self.curr_local_x -= 1;
+                self.route_x -= 1;
             }
             if curr & DirectionFlag::North as i8 != 0 {
-                self.curr_local_z += 1;
+                self.route_z += 1;
             } else if curr & DirectionFlag::South as i8 != 0 {
-                self.curr_local_z -= 1;
+                self.route_z -= 1;
             }
             next = *self
-                .directions
+                .dir_map
                 .as_ptr()
-                .add(Self::local_index(self.curr_local_x, self.curr_local_z));
+                .add(Self::local_index(self.route_x, self.route_z));
         }
 
         for i in 0..wp_len / 2 {
@@ -273,9 +273,9 @@ impl PathFinder {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn find_path_1<C: CollisionStrategy>(
+    unsafe fn route_find_size1<C: CollisionStrategy>(
         &mut self,
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         base_x: i32,
         base_z: i32,
         y: i32,
@@ -298,16 +298,16 @@ impl PathFinder {
 
         while self.buf_writer_index != self.buf_reader_index {
             let packed = *self.valid_local.as_ptr().add(self.buf_reader_index);
-            self.curr_local_x = (packed & 0xFFFF) as i32;
-            self.curr_local_z = (packed >> 16) as i32;
+            self.route_x = (packed & 0xFFFF) as i32;
+            self.route_z = (packed >> 16) as i32;
             self.buf_reader_index =
                 (self.buf_reader_index + 1) & (Self::DEFAULT_RING_BUFFER_SIZE - 1) as usize;
 
-            let reached: bool = ReachStrategy::reached(
+            let reached: bool = RouteDestination::has_arrived(
                 flags,
                 y,
-                self.curr_local_x + base_x,
-                self.curr_local_z + base_z,
+                self.route_x + base_x,
+                self.route_z + base_z,
                 local_dest_x + base_x,
                 local_dest_z + base_z,
                 dest_width,
@@ -322,9 +322,9 @@ impl PathFinder {
             }
 
             let distance: i32 = *self
-                .distances
+                .dist_map
                 .as_ptr()
-                .add(Self::local_index(self.curr_local_x, self.curr_local_z));
+                .add(Self::local_index(self.route_x, self.route_z));
             if distance != level {
                 level = distance;
                 if self.stop_len != 0 && self.settled() {
@@ -334,11 +334,11 @@ impl PathFinder {
             let next_distance: i32 = distance + 1;
 
             /* east to west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z;
+            x = self.route_x - 1;
+            z = self.route_z;
             clip_flag = CollisionFlag::BlockWest;
             dir_flag = DirectionFlag::East;
-            if self.curr_local_x > 0
+            if self.route_x > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -349,11 +349,11 @@ impl PathFinder {
             }
 
             /* west to east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z;
+            x = self.route_x + 1;
+            z = self.route_z;
             clip_flag = CollisionFlag::BlockEast;
             dir_flag = DirectionFlag::West;
-            if self.curr_local_x < relative_search_size
+            if self.route_x < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -364,11 +364,11 @@ impl PathFinder {
             }
 
             /* north to south  */
-            x = self.curr_local_x;
-            z = self.curr_local_z - 1;
+            x = self.route_x;
+            z = self.route_z - 1;
             clip_flag = CollisionFlag::BlockSouth;
             dir_flag = DirectionFlag::North;
-            if self.curr_local_z > 0
+            if self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -379,11 +379,11 @@ impl PathFinder {
             }
 
             /* south to north */
-            x = self.curr_local_x;
-            z = self.curr_local_z + 1;
+            x = self.route_x;
+            z = self.route_z + 1;
             clip_flag = CollisionFlag::BlockNorth;
             dir_flag = DirectionFlag::South;
-            if self.curr_local_z < relative_search_size
+            if self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -394,22 +394,22 @@ impl PathFinder {
             }
 
             /* north-east to south-west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z - 1;
+            x = self.route_x - 1;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::NorthEast;
-            if self.curr_local_x > 0
-                && self.curr_local_z > 0
+            if self.route_x > 0
+                && self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockSouthWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z, y),
                     CollisionFlag::BlockWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x, z, y),
                     CollisionFlag::BlockSouth as u32,
                 )
             {
@@ -417,22 +417,22 @@ impl PathFinder {
             }
 
             /* north-west to south-east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z - 1;
+            x = self.route_x + 1;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::NorthWest;
-            if self.curr_local_x < relative_search_size
-                && self.curr_local_z > 0
+            if self.route_x < relative_search_size
+                && self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockSouthEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z, y),
                     CollisionFlag::BlockEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x, z, y),
                     CollisionFlag::BlockSouth as u32,
                 )
             {
@@ -440,22 +440,22 @@ impl PathFinder {
             }
 
             /* south-east to north-west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z + 1;
+            x = self.route_x - 1;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::SouthEast;
-            if self.curr_local_x > 0
-                && self.curr_local_z < relative_search_size
+            if self.route_x > 0
+                && self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockNorthWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z, y),
                     CollisionFlag::BlockWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x, z, y),
                     CollisionFlag::BlockNorth as u32,
                 )
             {
@@ -463,22 +463,22 @@ impl PathFinder {
             }
 
             /* south-west to north-east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z + 1;
+            x = self.route_x + 1;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::SouthWest;
-            if self.curr_local_x < relative_search_size
-                && self.curr_local_z < relative_search_size
+            if self.route_x < relative_search_size
+                && self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockNorthEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z, y),
                     CollisionFlag::BlockEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x, z, y),
                     CollisionFlag::BlockNorth as u32,
                 )
             {
@@ -490,9 +490,9 @@ impl PathFinder {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn find_path_2<C: CollisionStrategy>(
+    unsafe fn route_find_size2<C: CollisionStrategy>(
         &mut self,
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         base_x: i32,
         base_z: i32,
         y: i32,
@@ -513,16 +513,16 @@ impl PathFinder {
 
         while self.buf_writer_index != self.buf_reader_index {
             let packed = *self.valid_local.as_ptr().add(self.buf_reader_index);
-            self.curr_local_x = (packed & 0xFFFF) as i32;
-            self.curr_local_z = (packed >> 16) as i32;
+            self.route_x = (packed & 0xFFFF) as i32;
+            self.route_z = (packed >> 16) as i32;
             self.buf_reader_index =
                 (self.buf_reader_index + 1) & (Self::DEFAULT_RING_BUFFER_SIZE - 1) as usize;
 
-            let reached: bool = ReachStrategy::reached(
+            let reached: bool = RouteDestination::has_arrived(
                 flags,
                 y,
-                self.curr_local_x + base_x,
-                self.curr_local_z + base_z,
+                self.route_x + base_x,
+                self.route_z + base_z,
                 local_dest_x + base_x,
                 local_dest_z + base_z,
                 dest_width,
@@ -537,23 +537,23 @@ impl PathFinder {
             }
 
             let next_distance: i32 = *self
-                .distances
+                .dist_map
                 .as_ptr()
-                .add(Self::local_index(self.curr_local_x, self.curr_local_z))
+                .add(Self::local_index(self.route_x, self.route_z))
                 + 1;
 
             /* east to west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z;
+            x = self.route_x - 1;
+            z = self.route_z;
             dir_flag = DirectionFlag::East;
-            if self.curr_local_x > 0
+            if self.route_x > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockSouthWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z + 1, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z + 1, y),
                     CollisionFlag::BlockNorthWest as u32,
                 )
             {
@@ -561,13 +561,13 @@ impl PathFinder {
             }
 
             /* west to east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z;
+            x = self.route_x + 1;
+            z = self.route_z;
             dir_flag = DirectionFlag::West;
-            if self.curr_local_x < relative_search_size
+            if self.route_x < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x + 2, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x + 2, z, y),
                     CollisionFlag::BlockSouthEast as u32,
                 )
                 && collision.can_move(
@@ -575,8 +575,8 @@ impl PathFinder {
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + 2,
-                        self.curr_local_z + 1,
+                        self.route_x + 2,
+                        self.route_z + 1,
                         y,
                     ),
                     CollisionFlag::BlockNorthEast as u32,
@@ -586,17 +586,17 @@ impl PathFinder {
             }
 
             /* north to south  */
-            x = self.curr_local_x;
-            z = self.curr_local_z - 1;
+            x = self.route_x;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::North;
-            if self.curr_local_z > 0
+            if self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockSouthWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x + 1, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x + 1, z, y),
                     CollisionFlag::BlockSouthEast as u32,
                 )
             {
@@ -604,13 +604,13 @@ impl PathFinder {
             }
 
             /* south to north */
-            x = self.curr_local_x;
-            z = self.curr_local_z + 1;
+            x = self.route_x;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::South;
-            if self.curr_local_z < relative_search_size
+            if self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z + 2, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z + 2, y),
                     CollisionFlag::BlockNorthWest as u32,
                 )
                 && collision.can_move(
@@ -618,8 +618,8 @@ impl PathFinder {
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + 1,
-                        self.curr_local_z + 2,
+                        self.route_x + 1,
+                        self.route_z + 2,
                         y,
                     ),
                     CollisionFlag::BlockNorthEast as u32,
@@ -629,14 +629,14 @@ impl PathFinder {
             }
 
             /* north-east to south-west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z - 1;
+            x = self.route_x - 1;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::NorthEast;
-            if self.curr_local_x > 0
-                && self.curr_local_z > 0
+            if self.route_x > 0
+                && self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z, y),
                     CollisionFlag::BlockNorthAndSouthEast as u32,
                 )
                 && collision.can_move(
@@ -644,7 +644,7 @@ impl PathFinder {
                     CollisionFlag::BlockSouthWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x, z, y),
                     CollisionFlag::BlockNorthEastAndWest as u32,
                 )
             {
@@ -652,29 +652,22 @@ impl PathFinder {
             }
 
             /* north-west to south-east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z - 1;
+            x = self.route_x + 1;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::NorthWest;
-            if self.curr_local_x < relative_search_size
-                && self.curr_local_z > 0
+            if self.route_x < relative_search_size
+                && self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockNorthEastAndWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x + 2, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x + 2, z, y),
                     CollisionFlag::BlockSouthEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(
-                        flags,
-                        base_x,
-                        base_z,
-                        self.curr_local_x + 2,
-                        self.curr_local_z,
-                        y,
-                    ),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x + 2, self.route_z, y),
                     CollisionFlag::BlockNorthAndSouthWest as u32,
                 )
             {
@@ -682,29 +675,22 @@ impl PathFinder {
             }
 
             /* south-east to north-west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z + 1;
+            x = self.route_x - 1;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::SouthEast;
-            if self.curr_local_x > 0
-                && self.curr_local_z < relative_search_size
+            if self.route_x > 0
+                && self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
                     CollisionFlag::BlockNorthAndSouthEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z + 2, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z + 2, y),
                     CollisionFlag::BlockNorthWest as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(
-                        flags,
-                        base_x,
-                        base_z,
-                        self.curr_local_x,
-                        self.curr_local_z + 2,
-                        y,
-                    ),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x, self.route_z + 2, y),
                     CollisionFlag::BlockSouthEastAndWest as u32,
                 )
             {
@@ -712,14 +698,14 @@ impl PathFinder {
             }
 
             /* south-west to north-east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z + 1;
+            x = self.route_x + 1;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::SouthWest;
-            if self.curr_local_x < relative_search_size
-                && self.curr_local_z < relative_search_size
+            if self.route_x < relative_search_size
+                && self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, x, self.curr_local_z + 2, y),
+                    Self::collision_flag(flags, base_x, base_z, x, self.route_z + 2, y),
                     CollisionFlag::BlockSouthEastAndWest as u32,
                 )
                 && collision.can_move(
@@ -727,14 +713,14 @@ impl PathFinder {
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + 2,
-                        self.curr_local_z + 2,
+                        self.route_x + 2,
+                        self.route_z + 2,
                         y,
                     ),
                     CollisionFlag::BlockNorthEast as u32,
                 )
                 && collision.can_move(
-                    Self::collision_flag(flags, base_x, base_z, self.curr_local_x + 2, z, y),
+                    Self::collision_flag(flags, base_x, base_z, self.route_x + 2, z, y),
                     CollisionFlag::BlockNorthAndSouthWest as u32,
                 )
             {
@@ -746,9 +732,9 @@ impl PathFinder {
 
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
-    unsafe fn find_path_n<C: CollisionStrategy>(
+    unsafe fn route_find_big<C: CollisionStrategy>(
         &mut self,
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         base_x: i32,
         base_z: i32,
         y: i32,
@@ -769,16 +755,16 @@ impl PathFinder {
 
         while self.buf_writer_index != self.buf_reader_index {
             let packed = *self.valid_local.as_ptr().add(self.buf_reader_index);
-            self.curr_local_x = (packed & 0xFFFF) as i32;
-            self.curr_local_z = (packed >> 16) as i32;
+            self.route_x = (packed & 0xFFFF) as i32;
+            self.route_z = (packed >> 16) as i32;
             self.buf_reader_index =
                 (self.buf_reader_index + 1) & (Self::DEFAULT_RING_BUFFER_SIZE - 1) as usize;
 
-            let reached: bool = ReachStrategy::reached(
+            let reached: bool = RouteDestination::has_arrived(
                 flags,
                 y,
-                self.curr_local_x + base_x,
-                self.curr_local_z + base_z,
+                self.route_x + base_x,
+                self.route_z + base_z,
                 local_dest_x + base_x,
                 local_dest_z + base_z,
                 dest_width,
@@ -793,16 +779,16 @@ impl PathFinder {
             }
 
             let next_distance: i32 = *self
-                .distances
+                .dist_map
                 .as_ptr()
-                .add(Self::local_index(self.curr_local_x, self.curr_local_z))
+                .add(Self::local_index(self.route_x, self.route_z))
                 + 1;
 
             /* east to west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z;
+            x = self.route_x - 1;
+            z = self.route_z;
             dir_flag = DirectionFlag::East;
-            if self.curr_local_x > 0
+            if self.route_x > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -814,7 +800,7 @@ impl PathFinder {
                         base_x,
                         base_z,
                         x,
-                        self.curr_local_z + src_size as i32 - 1,
+                        self.route_z + src_size as i32 - 1,
                         y,
                     ),
                     CollisionFlag::BlockNorthWest as u32,
@@ -824,14 +810,7 @@ impl PathFinder {
                 let mut blocked: bool = false;
                 for index in 1..src_size as i32 - 1 {
                     if !collision.can_move(
-                        Self::collision_flag(
-                            flags,
-                            base_x,
-                            base_z,
-                            x,
-                            self.curr_local_z + index,
-                            y,
-                        ),
+                        Self::collision_flag(flags, base_x, base_z, x, self.route_z + index, y),
                         clip_flag,
                     ) {
                         blocked = true;
@@ -844,17 +823,17 @@ impl PathFinder {
             }
 
             /* west to east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z;
+            x = self.route_x + 1;
+            z = self.route_z;
             dir_flag = DirectionFlag::West;
-            if self.curr_local_x < relative_search_size
+            if self.route_x < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + src_size as i32,
+                        self.route_x + src_size as i32,
                         z,
                         y,
                     ),
@@ -865,8 +844,8 @@ impl PathFinder {
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + src_size as i32,
-                        self.curr_local_z + src_size as i32 - 1,
+                        self.route_x + src_size as i32,
+                        self.route_z + src_size as i32 - 1,
                         y,
                     ),
                     CollisionFlag::BlockNorthEast as u32,
@@ -880,8 +859,8 @@ impl PathFinder {
                             flags,
                             base_x,
                             base_z,
-                            self.curr_local_x + src_size as i32,
-                            self.curr_local_z + index,
+                            self.route_x + src_size as i32,
+                            self.route_z + index,
                             y,
                         ),
                         clip_flag,
@@ -896,10 +875,10 @@ impl PathFinder {
             }
 
             /* north to south  */
-            x = self.curr_local_x;
-            z = self.curr_local_z - 1;
+            x = self.route_x;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::North;
-            if self.curr_local_z > 0
+            if self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -910,7 +889,7 @@ impl PathFinder {
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + src_size as i32 - 1,
+                        self.route_x + src_size as i32 - 1,
                         z,
                         y,
                     ),
@@ -921,14 +900,7 @@ impl PathFinder {
                 let mut blocked: bool = false;
                 for index in 1..src_size as i32 - 1 {
                     if !collision.can_move(
-                        Self::collision_flag(
-                            flags,
-                            base_x,
-                            base_z,
-                            self.curr_local_x + index,
-                            z,
-                            y,
-                        ),
+                        Self::collision_flag(flags, base_x, base_z, self.route_x + index, z, y),
                         clip_flag,
                     ) {
                         blocked = true;
@@ -941,10 +913,10 @@ impl PathFinder {
             }
 
             /* south to north */
-            x = self.curr_local_x;
-            z = self.curr_local_z + 1;
+            x = self.route_x;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::South;
-            if self.curr_local_z < relative_search_size
+            if self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(
@@ -952,7 +924,7 @@ impl PathFinder {
                         base_x,
                         base_z,
                         x,
-                        self.curr_local_z + src_size as i32,
+                        self.route_z + src_size as i32,
                         y,
                     ),
                     CollisionFlag::BlockNorthWest as u32,
@@ -962,8 +934,8 @@ impl PathFinder {
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + src_size as i32 - 1,
-                        self.curr_local_z + src_size as i32,
+                        self.route_x + src_size as i32 - 1,
+                        self.route_z + src_size as i32,
                         y,
                     ),
                     CollisionFlag::BlockNorthEast as u32,
@@ -978,7 +950,7 @@ impl PathFinder {
                             base_x,
                             base_z,
                             x + index,
-                            self.curr_local_z + src_size as i32,
+                            self.route_z + src_size as i32,
                             y,
                         ),
                         clip_flag,
@@ -993,11 +965,11 @@ impl PathFinder {
             }
 
             /* north-east to south-west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z - 1;
+            x = self.route_x - 1;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::NorthEast;
-            if self.curr_local_x > 0
-                && self.curr_local_z > 0
+            if self.route_x > 0
+                && self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(flags, base_x, base_z, x, z, y),
@@ -1009,24 +981,10 @@ impl PathFinder {
                 let mut blocked: bool = false;
                 for index in 1..src_size as i32 {
                     if !collision.can_move(
-                        Self::collision_flag(
-                            flags,
-                            base_x,
-                            base_z,
-                            x,
-                            self.curr_local_z + index - 1,
-                            y,
-                        ),
+                        Self::collision_flag(flags, base_x, base_z, x, self.route_z + index - 1, y),
                         clip_flag1,
                     ) || !collision.can_move(
-                        Self::collision_flag(
-                            flags,
-                            base_x,
-                            base_z,
-                            self.curr_local_x + index - 1,
-                            z,
-                            y,
-                        ),
+                        Self::collision_flag(flags, base_x, base_z, self.route_x + index - 1, z, y),
                         clip_flag2,
                     ) {
                         blocked = true;
@@ -1039,18 +997,18 @@ impl PathFinder {
             }
 
             /* north-west to south-east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z - 1;
+            x = self.route_x + 1;
+            z = self.route_z - 1;
             dir_flag = DirectionFlag::NorthWest;
-            if self.curr_local_x < relative_search_size
-                && self.curr_local_z > 0
+            if self.route_x < relative_search_size
+                && self.route_z > 0
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + src_size as i32,
+                        self.route_x + src_size as i32,
                         z,
                         y,
                     ),
@@ -1066,20 +1024,13 @@ impl PathFinder {
                             flags,
                             base_x,
                             base_z,
-                            self.curr_local_x + src_size as i32,
-                            self.curr_local_z + index - 1,
+                            self.route_x + src_size as i32,
+                            self.route_z + index - 1,
                             y,
                         ),
                         clip_flag1,
                     ) || !collision.can_move(
-                        Self::collision_flag(
-                            flags,
-                            base_x,
-                            base_z,
-                            self.curr_local_x + index,
-                            z,
-                            y,
-                        ),
+                        Self::collision_flag(flags, base_x, base_z, self.route_x + index, z, y),
                         clip_flag2,
                     ) {
                         blocked = true;
@@ -1092,11 +1043,11 @@ impl PathFinder {
             }
 
             /* south-east to north-west */
-            x = self.curr_local_x - 1;
-            z = self.curr_local_z + 1;
+            x = self.route_x - 1;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::SouthEast;
-            if self.curr_local_x > 0
-                && self.curr_local_z < relative_search_size
+            if self.route_x > 0
+                && self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(
@@ -1104,7 +1055,7 @@ impl PathFinder {
                         base_x,
                         base_z,
                         x,
-                        self.curr_local_z + src_size as i32,
+                        self.route_z + src_size as i32,
                         y,
                     ),
                     CollisionFlag::BlockNorthWest as u32,
@@ -1115,22 +1066,15 @@ impl PathFinder {
                 let mut blocked: bool = false;
                 for index in 1..src_size as i32 {
                     if !collision.can_move(
-                        Self::collision_flag(
-                            flags,
-                            base_x,
-                            base_z,
-                            x,
-                            self.curr_local_z + index,
-                            y,
-                        ),
+                        Self::collision_flag(flags, base_x, base_z, x, self.route_z + index, y),
                         clip_flag1,
                     ) || !collision.can_move(
                         Self::collision_flag(
                             flags,
                             base_x,
                             base_z,
-                            self.curr_local_x + index - 1,
-                            self.curr_local_z + src_size as i32,
+                            self.route_x + index - 1,
+                            self.route_z + src_size as i32,
                             y,
                         ),
                         clip_flag2,
@@ -1145,19 +1089,19 @@ impl PathFinder {
             }
 
             /* south-west to north-east */
-            x = self.curr_local_x + 1;
-            z = self.curr_local_z + 1;
+            x = self.route_x + 1;
+            z = self.route_z + 1;
             dir_flag = DirectionFlag::SouthWest;
-            if self.curr_local_x < relative_search_size
-                && self.curr_local_z < relative_search_size
+            if self.route_x < relative_search_size
+                && self.route_z < relative_search_size
                 && *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
                 && collision.can_move(
                     Self::collision_flag(
                         flags,
                         base_x,
                         base_z,
-                        self.curr_local_x + src_size as i32,
-                        self.curr_local_z + src_size as i32,
+                        self.route_x + src_size as i32,
+                        self.route_z + src_size as i32,
                         y,
                     ),
                     CollisionFlag::BlockNorthEast as u32,
@@ -1172,8 +1116,8 @@ impl PathFinder {
                             flags,
                             base_x,
                             base_z,
-                            self.curr_local_x + index,
-                            self.curr_local_z + src_size as i32,
+                            self.route_x + index,
+                            self.route_z + src_size as i32,
                             y,
                         ),
                         clip_flag1,
@@ -1182,8 +1126,8 @@ impl PathFinder {
                             flags,
                             base_x,
                             base_z,
-                            self.curr_local_x + src_size as i32,
-                            self.curr_local_z + index,
+                            self.route_x + src_size as i32,
+                            self.route_z + index,
                             y,
                         ),
                         clip_flag2,
@@ -1218,7 +1162,7 @@ impl PathFinder {
                 if !((0..Self::DEFAULT_SEARCH_MAP_SIZE).contains(&x)
                     && (0..Self::DEFAULT_SEARCH_MAP_SIZE).contains(&z))
                     || *self.generations.as_ptr().add(Self::local_index(x, z)) != self.generation
-                    || *self.distances.as_ptr().add(Self::local_index(x, z))
+                    || *self.dist_map.as_ptr().add(Self::local_index(x, z))
                         >= Self::MAX_ALTERNATIVE_ROUTE_SEEK_RANGE
                 {
                     continue;
@@ -1242,12 +1186,12 @@ impl PathFinder {
                 if cost < lowest_cost
                     || (cost == lowest_cost
                         && max_alternative_path
-                            > *self.distances.as_ptr().add(Self::local_index(x, z)))
+                            > *self.dist_map.as_ptr().add(Self::local_index(x, z)))
                 {
-                    self.curr_local_x = x;
-                    self.curr_local_z = z;
+                    self.route_x = x;
+                    self.route_z = z;
                     lowest_cost = cost;
-                    max_alternative_path = *self.distances.as_ptr().add(Self::local_index(x, z));
+                    max_alternative_path = *self.dist_map.as_ptr().add(Self::local_index(x, z));
                 }
             }
         }
@@ -1261,7 +1205,7 @@ impl PathFinder {
         for i in 0..self.stop_len {
             let index: usize = *self.stop_tiles.as_ptr().add(i);
             if *self.generations.as_ptr().add(index) == self.generation
-                && *self.distances.as_ptr().add(index) < Self::MAX_ALTERNATIVE_ROUTE_SEEK_RANGE
+                && *self.dist_map.as_ptr().add(index) < Self::MAX_ALTERNATIVE_ROUTE_SEEK_RANGE
             {
                 return true;
             }
@@ -1272,7 +1216,7 @@ impl PathFinder {
     /// Whether a step from any side can end on local tile `x`, `z`.
     #[inline(always)]
     unsafe fn enterable<C: CollisionStrategy>(
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         collision: &C,
         base_x: i32,
         base_z: i32,
@@ -1307,7 +1251,7 @@ impl PathFinder {
 
     #[inline(always)]
     unsafe fn collision_flag(
-        flags: &CollisionFlagMap,
+        flags: &CollisionMap,
         base_x: i32,
         base_z: i32,
         local_x: i32,
@@ -1320,8 +1264,8 @@ impl PathFinder {
     #[inline(always)]
     unsafe fn append_direction(&mut self, x: i32, z: i32, direction: i8, distance: i32) {
         let index: usize = Self::local_index(x, z);
-        *self.directions.as_mut_ptr().add(index) = direction;
-        *self.distances.as_mut_ptr().add(index) = distance;
+        *self.dir_map.as_mut_ptr().add(index) = direction;
+        *self.dist_map.as_mut_ptr().add(index) = distance;
         *self.generations.as_mut_ptr().add(index) = self.generation;
         *self.valid_local.as_mut_ptr().add(self.buf_writer_index) = (x as u32) | ((z as u32) << 16);
         self.buf_writer_index =
@@ -1344,7 +1288,7 @@ impl PathFinder {
 /// The closest approach point's box around a 1x1 destination, nearest first:
 /// `(dx, dz, cost)` with cost `dx * dx + dz * dz`, the destination left out.
 static APPROACH_OFFSETS: Lazy<Vec<(i32, i32, i32)>> = Lazy::new(|| {
-    let range: i32 = PathFinder::MAX_ALTERNATIVE_ROUTE_DISTANCE_FROM_DESTINATION;
+    let range: i32 = RouteFinding::MAX_ALTERNATIVE_ROUTE_DISTANCE_FROM_DESTINATION;
     let mut offsets: Vec<(i32, i32, i32)> = Vec::new();
     for dx in -range..=range {
         for dz in -range..=range {
@@ -1359,13 +1303,13 @@ static APPROACH_OFFSETS: Lazy<Vec<(i32, i32, i32)>> = Lazy::new(|| {
 
 #[cfg(test)]
 mod tests {
-    use crate::rsmod::collision::collision::CollisionFlagMap;
+    use crate::rsmod::collision::collision::CollisionMap;
     use crate::rsmod::collision::collision_strategy::Normal;
     use crate::rsmod::flag::collision_flag::CollisionFlag;
-    use crate::rsmod::pathfinder::PathFinder;
+    use crate::rsmod::pathfinder::RouteFinding;
 
-    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionFlagMap {
-        let mut collision = CollisionFlagMap::new();
+    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionMap {
+        let mut collision = CollisionMap::new();
         for y in 0..4 {
             for z in z1.min(z2)..=z1.max(z2) {
                 for x in x1.min(x2)..=x1.max(x2) {
@@ -1377,7 +1321,7 @@ mod tests {
     }
 
     unsafe fn flag(
-        flags: &mut CollisionFlagMap,
+        flags: &mut CollisionMap,
         base_x: i32,
         base_z: i32,
         width: i32,
@@ -1400,41 +1344,41 @@ mod tests {
         let dest_x = 3201;
         let dest_z = 3200;
 
-        let mut pf = PathFinder::new();
+        let mut pf = RouteFinding::new();
 
         unsafe {
             let collision = build_collision_map(src_x, src_z, dest_x, dest_z);
 
-            let mut route = pf.find_path(
+            let mut route = pf.find_route(
                 &collision, 0, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
             assert!(!route.is_empty());
-            for index in 0..route.len() {
-                assert_eq!(0, (route[index] >> 28) & 0x3);
+            for waypoint in route {
+                assert_eq!(0, (waypoint >> 28) & 0x3);
             }
 
-            route = pf.find_path(
+            route = pf.find_route(
                 &collision, 1, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
             assert!(!route.is_empty());
-            for index in 0..route.len() {
-                assert_eq!(1, (route[index] >> 28) & 0x3);
+            for waypoint in route {
+                assert_eq!(1, (waypoint >> 28) & 0x3);
             }
 
-            route = pf.find_path(
+            route = pf.find_route(
                 &collision, 2, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
             assert!(!route.is_empty());
-            for index in 0..route.len() {
-                assert_eq!(2, (route[index] >> 28) & 0x3);
+            for waypoint in route {
+                assert_eq!(2, (waypoint >> 28) & 0x3);
             }
 
-            route = pf.find_path(
+            route = pf.find_route(
                 &collision, 3, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
             assert!(!route.is_empty());
-            for index in 0..route.len() {
-                assert_eq!(3, (route[index] >> 28) & 0x3);
+            for waypoint in route {
+                assert_eq!(3, (waypoint >> 28) & 0x3);
             }
         }
     }
@@ -1446,7 +1390,7 @@ mod tests {
         let dest_x = 3205;
         let dest_z = 3200;
 
-        let mut pf = PathFinder::new();
+        let mut pf = RouteFinding::new();
 
         unsafe {
             let mut collision = build_collision_map(src_x, src_z, dest_x, dest_z);
@@ -1461,7 +1405,7 @@ mod tests {
             );
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32); // Remove collision flag from source tile
 
-            let route = pf.find_path(
+            let route = pf.find_route(
                 &collision, 0, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
             // expect(route.alternative).toBeTruthy();
@@ -1476,7 +1420,7 @@ mod tests {
         let dest_x = 3205;
         let dest_z = 3200;
 
-        let mut pf = PathFinder::new();
+        let mut pf = RouteFinding::new();
 
         unsafe {
             let mut collision = build_collision_map(src_x, src_z, dest_x, dest_z);
@@ -1491,7 +1435,7 @@ mod tests {
             );
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32); // Remove collision flag from source tile
 
-            let route = pf.find_path(
+            let route = pf.find_route(
                 &collision, 0, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, false, 0, 25, &Normal,
             );
             // expect(route.failed).toBeTruthy();
@@ -1506,7 +1450,7 @@ mod tests {
         let dest_x = 3200;
         let dest_z = 3205;
 
-        let mut pf = PathFinder::new();
+        let mut pf = RouteFinding::new();
 
         unsafe {
             let mut collision = build_collision_map(src_x, src_z, dest_x, dest_z);
@@ -1522,7 +1466,7 @@ mod tests {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32); // Remove collision flag from source tile
             collision.set(src_x, src_z - 1, 0, CollisionFlag::Open as u32); // Remove collision flag from tile south of source tile.
 
-            let route = pf.find_path(
+            let route = pf.find_route(
                 &collision, 0, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
             // expect(route.success).toBeTruthy();
@@ -1549,12 +1493,12 @@ mod tests {
         let dest_x = 3200;
         let dest_z = 3201;
 
-        let mut pf = PathFinder::new();
+        let mut pf = RouteFinding::new();
 
         unsafe {
             let mut collision = build_collision_map(src_x, src_z, dest_x, dest_z);
 
-            collision.add(
+            collision.add_cmap(
                 dest_x,
                 dest_z,
                 0,
@@ -1564,7 +1508,7 @@ mod tests {
                     | CollisionFlag::WallEast as u32,
             );
 
-            let route = pf.find_path(
+            let route = pf.find_route(
                 &collision, 0, src_x, src_z, dest_x, dest_z, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
             );
 
@@ -1582,14 +1526,14 @@ mod tests {
             let dest_x = 3200;
             let dest_z = 3210 + size;
 
-            let mut pf = PathFinder::new();
+            let mut pf = RouteFinding::new();
 
             unsafe {
                 let mut collision = build_collision_map(src_x, src_z, dest_x, dest_z);
 
                 collision.set(src_x, src_z + 1, 0, CollisionFlag::Loc as u32);
 
-                let route = pf.find_path(
+                let route = pf.find_route(
                     &collision, 0, src_x, src_z, dest_x, dest_z, size as u8, 1, 1, 0, -1, true, 0,
                     25, &Normal,
                 );

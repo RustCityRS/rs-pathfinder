@@ -22,7 +22,7 @@ pub enum CollisionFlag {
     WallSouthWestProjBlocker = 0x8000,
     WallWestProjBlocker = 0x10000,
     LocProjBlocker = 0x20000,
-    FloorDecoration = 0x40000,
+    GroundDecor = 0x40000,
 
     /**
      * Custom flag dedicated to blocking NPCs.
@@ -40,7 +40,7 @@ pub enum CollisionFlag {
      */
     Player = 0x100000,
 
-    Floor = 0x200000,
+    Ground = 0x200000,
     WallNorthWestRouteBlocker = 0x400000,
     WallNorthRouteBlocker = 0x800000,
     WallNorthEastRouteBlocker = 0x1000000,

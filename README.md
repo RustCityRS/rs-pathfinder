@@ -56,7 +56,7 @@ lib.rs (public API + global state)
       ├── line_pathfinder.rs     Line-of-sight / line-of-walk (returns path coords)
       ├── step_validator.rs      Single-step movement validation
       ├── collision/
-      │    ├── collision.rs       CollisionFlagMap (zone-based tile storage)
+      │    ├── collision.rs       CollisionMap (zone-based tile storage)
       │    └── collision_strategy.rs  5 collision strategies (function pointers)
       ├── flag/
       │    ├── collision_flag.rs  All collision bitmask constants
@@ -95,13 +95,13 @@ Construction: `CoordGrid::new(y, x, z)` packs via `(z & 0x3fff) | ((x & 0x3fff) 
 
 Extraction: `coord.y()`, `coord.x()`, `coord.z()` unpack with shifts and masks.
 
-Waypoints returned by `find_path` and `line_of_sight`/`line_of_walk` are arrays of these packed `u32` values.
+Waypoints returned by `find_route` and `line_of_sight`/`line_of_walk` are arrays of these packed `u32` values.
 
 ---
 
 ## Collision Flag Map
 
-### CollisionFlagMap (`collision/collision.rs`)
+### CollisionMap (`collision/collision.rs`)
 
 The collision map is a zone-based sparse storage for per-tile collision flags across the entire game world.
 
@@ -173,7 +173,7 @@ still blocking projectiles. Example: `WallNorthRouteBlocker` = 0x800000, `locRou
 **Special flags**:
 | Flag | Hex | Purpose |
 |------|-----|---------|
-| `FloorDecoration` | 0x40000 | Floor decoration present |
+| `GroundDecor` | 0x40000 | Floor decoration present |
 | `Npc` | 0x80000 | NPC occupies tile (custom flag) |
 | `Player` | 0x100000 | Player occupies tile (custom flag) |
 | `Floor` | 0x200000 | Floor exists (used for blocked-strategy) |
@@ -183,7 +183,7 @@ still blocking projectiles. Example: `WallNorthRouteBlocker` = 0x800000, `locRou
 **Composite masks** (precomputed for the pathfinder):
 | Mask | Hex | Composition |
 |------|-----|-------------|
-| `FloorBlocked` | 0x240000 | `Floor \| FloorDecoration` |
+| `FloorBlocked` | 0x240000 | `Floor \| GroundDecor` |
 | `WalkBlocked` | 0x240100 | `FloorBlocked \| Loc` |
 | `BlockWest` | 0x240108 | `WalkBlocked \| WallWest` |
 | `BlockEast` | 0x240180 | `WalkBlocked \| WallEast` (note: inverted - checks the wall the entity would cross) |
@@ -295,7 +295,7 @@ have route blockers.
 
 ## Pathfinder (BFS A*)
 
-### PathFinder (`pathfinder.rs`)
+### RouteFinding (`pathfinder.rs`)
 
 The main pathfinding algorithm: a **Breadth-First Search** over a 128x128 local grid, producing an optimal shortest path
 of up to 25 waypoints.
@@ -326,13 +326,13 @@ wrap-around (~4.3 billion calls).
 
 **Three size-specialized BFS functions**:
 
-1. **`find_path_1`** - Source entity size 1x1. Simplest collision checks: each cardinal direction checks one tile, each
+1. **`route_find_size1`** - Source entity size 1x1. Simplest collision checks: each cardinal direction checks one tile, each
    diagonal checks three tiles (the diagonal tile + both adjacent cardinal tiles).
 
-2. **`find_path_2`** - Source entity size 2x2. Checks the two edge tiles for each cardinal direction and three tiles for
+2. **`route_find_size2`** - Source entity size 2x2. Checks the two edge tiles for each cardinal direction and three tiles for
    diagonals. Uses composite flags like `BlockNorthAndSouthEast`.
 
-3. **`find_path_n`** - Source entity size NxN (3+). Checks corner tiles plus iterates the edge tiles between them.
+3. **`route_find_big`** - Source entity size NxN (3+). Checks corner tiles plus iterates the edge tiles between them.
    Generalizes the size-2 approach with loops.
 
 **BFS expansion order**: For each tile, the algorithm tries 8 directions in order:
@@ -494,7 +494,7 @@ tiles with edge-composite flags (e.g., `BlockNorthAndSouthEast` for tiles along 
 
 ## Reach Strategy
 
-### ReachStrategy (`reach/reach_strategy.rs`)
+### RouteDestination (`reach/reach_strategy.rs`)
 
 Determines whether a source entity is "in range" to interact with a destination object, based on the object's shape.
 
@@ -510,7 +510,7 @@ Determines whether a source entity is "in range" to interact with a destination 
 **Quick exit**: If strategy is not `RECTANGLE_EXCLUSIVE` and `src == dest`, return true immediately (standing on the
 destination).
 
-### Wall reach (`reach_wall_1`, `reach_wall_n`)
+### Wall reach (`test_wall_1`, `test_wall_n`)
 
 For wall objects, reach is determined by adjacency + direction. The source must be on the correct side of the wall and
 the intervening wall flag must not be set.
@@ -525,19 +525,19 @@ For `WallDiagonal` (shape 9): The entity must be adjacent on any cardinal side, 
 
 Size-N variants extend these checks to handle multi-tile sources, checking range overlap instead of exact adjacency.
 
-### Wall decor reach (`reach_wall_decor_1`, `reach_wall_decor_n`)
+### Wall decor reach (`test_wdecor_1`, `test_wdecor_n`)
 
 For wall decorations (shapes 4-8). Shape 7 gets a special +2 rotation via `altered_rotation`. Shapes 6 and 7 use
 two-sided checks (two adjacent tiles). Shape 8 uses four-sided checks (all cardinal neighbors).
 
-### Rectangle reach (`reach_rectangle`, `reach_exclusive_rectangle`)
+### Rectangle reach (`test_loc`, `test_loc_exclusive`)
 
 For standard locs and ground decorations. Handles rotation of width/height and block access flags.
 
-**`reach_rectangle`**: Source has reached the destination if it either **overlaps** the destination OR is **adjacent**
-to it (via `reach_rectangle_1` or `reach_rectangle_n`).
+**`test_loc`**: Source has reached the destination if it either **overlaps** the destination OR is **adjacent**
+to it (via `test_loc_1` or `test_adjacent_edge`).
 
-**`reach_exclusive_rectangle`**: Source has reached the destination ONLY if it is **adjacent** and does NOT overlap.
+**`test_loc_exclusive`**: Source has reached the destination ONLY if it is **adjacent** and does NOT overlap.
 Used for shape -2 (e.g., interacting with objects you shouldn't stand on).
 
 ---
@@ -548,9 +548,9 @@ Used for shape -2 (e.g., interacting with objects you shouldn't stand on).
 
 Low-level adjacency checks for rectangle-to-rectangle reach.
 
-**`collides`**: AABB intersection test. Returns true if two rectangles overlap at all.
+**`test_overlap`**: AABB intersection test. Returns true if two rectangles overlap at all.
 
-**`reach_rectangle_1`** (source size 1): Checks if the 1x1 source is cardinally adjacent to the destination rectangle
+**`test_loc_1`** (source size 1): Checks if the 1x1 source is cardinally adjacent to the destination rectangle
 and no wall flag blocks approach from that direction. Also respects `block_access_flags` - if approach from a given side
 is blocked by the loc's configuration, that side returns false.
 
@@ -561,7 +561,7 @@ Checks in order:
 3. South side: `src_z + 1 == dest_z` in x-range, no `WallNorth` on source, south access not blocked
 4. North side: `src_z == north + 1` in x-range, no `WallSouth` on source, north access not blocked
 
-**`reach_rectangle_n`** (source size N): Checks if ANY tile along the overlapping edge between the two rectangles has no
+**`test_adjacent_edge`** (source size N): Checks if ANY tile along the overlapping edge between the two rectangles has no
 wall blocking. Iterates the overlapping range on each cardinal side.
 
 ---
@@ -680,15 +680,15 @@ positions. Uses circular bit rotation: `((flags << angle) & 0xf) | (flags >> (4 
 The crate uses two `static mut` globals wrapped in `Lazy`:
 
 ```rust
-static mut COLLISION_FLAGS: Lazy<CollisionFlagMap> = Lazy::new(CollisionFlagMap::new);
-static mut PATHFINDER: Lazy<PathFinder> = Lazy::new(PathFinder::new);
+static mut COLLISION_FLAGS: Lazy<CollisionMap> = Lazy::new(CollisionMap::new);
+static mut PATHFINDER: Lazy<RouteFinding> = Lazy::new(RouteFinding::new);
 ```
 
 **Safety invariant**: All writes to `COLLISION_FLAGS` happen on the single-threaded engine tick (loc/npc/player
 add/remove). Reads happen from both the tick thread and async pathfinding. During async phases, no writer runs, so
 concurrent reads are sound.
 
-`PATHFINDER` is only used from the tick thread (sync pathfinding). Async pathfinding would need its own `PathFinder`
+`PATHFINDER` is only used from the tick thread (sync pathfinding). Async pathfinding would need its own `RouteFinding`
 instances.
 
 The crate suppresses safety-related lints:
@@ -711,7 +711,7 @@ delegate to the internal modules through the global `COLLISION_FLAGS` and `PATHF
 
 | Function                     | Returns          | Purpose                                 |
 |------------------------------|------------------|-----------------------------------------|
-| `find_path(...)`             | `&'static [u32]` | BFS pathfind, sync tick-thread only     |
+| `find_route(...)`             | `&'static [u32]` | BFS pathfind, sync tick-thread only     |
 | `find_naive_path(...)`       | `&'static [u32]` | Greedy NPC pathfind                     |
 | `has_line_of_sight(...)`     | `bool`           | Projectile LoS check                    |
 | `has_line_of_walk(...)`      | `bool`           | Walk LoS check                          |

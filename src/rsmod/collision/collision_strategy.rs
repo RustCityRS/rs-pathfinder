@@ -54,9 +54,9 @@ impl CollisionStrategy for Normal {
 impl CollisionStrategy for Blocked {
     #[inline(always)]
     fn can_move(&self, tile_flag: u32, block_flag: u32) -> bool {
-        let flag = block_flag & !(CollisionFlag::Floor as u32);
+        let flag = block_flag & !(CollisionFlag::Ground as u32);
         (tile_flag & flag) == CollisionFlag::Open as u32
-            && (tile_flag & CollisionFlag::Floor as u32) != CollisionFlag::Open as u32
+            && (tile_flag & CollisionFlag::Ground as u32) != CollisionFlag::Open as u32
     }
 }
 
@@ -139,17 +139,17 @@ macro_rules! with_collision_strategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rsmod::collision::collision::CollisionFlagMap;
-    use crate::rsmod::pathfinder::PathFinder;
+    use crate::rsmod::collision::collision::CollisionMap;
+    use crate::rsmod::pathfinder::RouteFinding;
 
     #[test]
     fn route_blockers_pass_locs_without_route_blocker_flags() {
-        let mut flags = CollisionFlagMap::new();
-        let mut finder = PathFinder::new();
-        let mut path = |flags: &CollisionFlagMap, route_blockers: bool| unsafe {
+        let mut flags = CollisionMap::new();
+        let mut finder = RouteFinding::new();
+        let mut path = |flags: &CollisionMap, route_blockers: bool| unsafe {
             if route_blockers {
                 finder
-                    .find_path(
+                    .find_route(
                         flags,
                         0,
                         1000,
@@ -169,7 +169,7 @@ mod tests {
                     .to_vec()
             } else {
                 finder
-                    .find_path(
+                    .find_route(
                         flags, 0, 1000, 1003, 1004, 1003, 1, 1, 1, 0, -1, true, 0, 25, &Normal,
                     )
                     .to_vec()
@@ -177,10 +177,10 @@ mod tests {
         };
         unsafe { flags.allocate_if_absent(1000, 1000, 0) };
         let straight = path(&flags, false);
-        unsafe { flags.add(1002, 1003, 0, CollisionFlag::Loc as u32) };
+        unsafe { flags.add_cmap(1002, 1003, 0, CollisionFlag::Loc as u32) };
         assert_eq!(path(&flags, true), straight);
         assert_ne!(path(&flags, false), straight);
-        unsafe { flags.add(1002, 1003, 0, CollisionFlag::LocRouteBlocker as u32) };
+        unsafe { flags.add_cmap(1002, 1003, 0, CollisionFlag::LocRouteBlocker as u32) };
         assert_ne!(path(&flags, true), straight);
     }
 }

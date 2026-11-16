@@ -1,4 +1,4 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 
 pub(crate) struct ZoneFlagMap {
     flags: Box<[u8]>,
@@ -7,7 +7,7 @@ pub(crate) struct ZoneFlagMap {
 impl ZoneFlagMap {
     pub fn new() -> ZoneFlagMap {
         ZoneFlagMap {
-            flags: vec![0u8; CollisionFlagMap::TOTAL_ZONE_COUNT].into_boxed_slice(),
+            flags: vec![0u8; CollisionMap::TOTAL_ZONE_COUNT].into_boxed_slice(),
         }
     }
 
@@ -16,7 +16,7 @@ impl ZoneFlagMap {
         let zone = self
             .flags
             .as_mut_ptr()
-            .add(CollisionFlagMap::zone_index(x, z, y));
+            .add(CollisionMap::zone_index(x, z, y));
         if add {
             *zone |= mask;
         } else {
@@ -26,12 +26,7 @@ impl ZoneFlagMap {
 
     #[inline(always)]
     pub const unsafe fn is_flagged(&self, x: i32, z: i32, y: i32, mask: u8) -> bool {
-        *self
-            .flags
-            .as_ptr()
-            .add(CollisionFlagMap::zone_index(x, z, y))
-            & mask
-            != 0
+        *self.flags.as_ptr().add(CollisionMap::zone_index(x, z, y)) & mask != 0
     }
 
     #[inline(always)]
@@ -56,8 +51,8 @@ mod tests {
             for z in 3200..3208 {
                 for y in 0..4 {
                     unsafe {
-                        assert_eq!(false, zones.is_flagged(x, z, y, ZoneFlag::Free as u8));
-                        assert_eq!(false, zones.is_flagged(x, z, y, ZoneFlag::Multi as u8));
+                        assert!(!zones.is_flagged(x, z, y, ZoneFlag::Free as u8));
+                        assert!(!zones.is_flagged(x, z, y, ZoneFlag::Multi as u8));
                     }
                 }
             }
@@ -70,10 +65,10 @@ mod tests {
 
         unsafe {
             zones.change_zone(3200, 3200, 0, ZoneFlag::Free as u8, true);
-            assert_eq!(true, zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
+            assert!(zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
 
             zones.change_zone(3200, 3200, 0, ZoneFlag::Free as u8, false);
-            assert_eq!(false, zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
         }
     }
 
@@ -86,15 +81,15 @@ mod tests {
 
             for x in 3200..3208 {
                 for z in 3200..3208 {
-                    assert_eq!(true, zones.is_flagged(x, z, 0, ZoneFlag::Free as u8));
+                    assert!(zones.is_flagged(x, z, 0, ZoneFlag::Free as u8));
                 }
             }
 
-            assert_eq!(false, zones.is_flagged(3199, 3204, 0, ZoneFlag::Free as u8));
-            assert_eq!(false, zones.is_flagged(3208, 3204, 0, ZoneFlag::Free as u8));
-            assert_eq!(false, zones.is_flagged(3204, 3199, 0, ZoneFlag::Free as u8));
-            assert_eq!(false, zones.is_flagged(3204, 3208, 0, ZoneFlag::Free as u8));
-            assert_eq!(false, zones.is_flagged(3204, 3204, 1, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3199, 3204, 0, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3208, 3204, 0, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3204, 3199, 0, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3204, 3208, 0, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3204, 3204, 1, ZoneFlag::Free as u8));
         }
     }
 
@@ -105,15 +100,12 @@ mod tests {
         unsafe {
             zones.change_zone(3200, 3200, 0, ZoneFlag::Free as u8, true);
             zones.change_zone(3200, 3200, 0, ZoneFlag::Multi as u8, true);
-            assert_eq!(true, zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
-            assert_eq!(true, zones.is_flagged(3200, 3200, 0, ZoneFlag::Multi as u8));
+            assert!(zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
+            assert!(zones.is_flagged(3200, 3200, 0, ZoneFlag::Multi as u8));
 
             zones.change_zone(3200, 3200, 0, ZoneFlag::Multi as u8, false);
-            assert_eq!(true, zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
-            assert_eq!(
-                false,
-                zones.is_flagged(3200, 3200, 0, ZoneFlag::Multi as u8)
-            );
+            assert!(zones.is_flagged(3200, 3200, 0, ZoneFlag::Free as u8));
+            assert!(!zones.is_flagged(3200, 3200, 0, ZoneFlag::Multi as u8));
         }
     }
 
@@ -124,15 +116,15 @@ mod tests {
         unsafe {
             zones.change_zone(3200, 3200, 0, ZoneFlag::Free as u8, true);
 
-            assert_eq!(true, zones.borders(3208, 3200, 0, ZoneFlag::Free as u8));
-            assert_eq!(true, zones.borders(3199, 3200, 0, ZoneFlag::Free as u8));
-            assert_eq!(true, zones.borders(3200, 3208, 0, ZoneFlag::Free as u8));
-            assert_eq!(true, zones.borders(3200, 3199, 0, ZoneFlag::Free as u8));
+            assert!(zones.borders(3208, 3200, 0, ZoneFlag::Free as u8));
+            assert!(zones.borders(3199, 3200, 0, ZoneFlag::Free as u8));
+            assert!(zones.borders(3200, 3208, 0, ZoneFlag::Free as u8));
+            assert!(zones.borders(3200, 3199, 0, ZoneFlag::Free as u8));
 
-            assert_eq!(true, zones.borders(3204, 3204, 0, ZoneFlag::Free as u8));
+            assert!(zones.borders(3204, 3204, 0, ZoneFlag::Free as u8));
 
-            assert_eq!(false, zones.borders(3209, 3200, 0, ZoneFlag::Free as u8));
-            assert_eq!(false, zones.borders(3208, 3208, 0, ZoneFlag::Free as u8));
+            assert!(!zones.borders(3209, 3200, 0, ZoneFlag::Free as u8));
+            assert!(!zones.borders(3208, 3208, 0, ZoneFlag::Free as u8));
         }
     }
 
@@ -143,10 +135,10 @@ mod tests {
         unsafe {
             zones.change_zone(0, 0, 0, ZoneFlag::Free as u8, true);
 
-            assert_eq!(true, zones.borders(0, 0, 0, ZoneFlag::Free as u8));
+            assert!(zones.borders(0, 0, 0, ZoneFlag::Free as u8));
 
             zones.change_zone(0, 0, 0, ZoneFlag::Free as u8, false);
-            assert_eq!(false, zones.borders(0, 0, 0, ZoneFlag::Free as u8));
+            assert!(!zones.borders(0, 0, 0, ZoneFlag::Free as u8));
         }
     }
 }

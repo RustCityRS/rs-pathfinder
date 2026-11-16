@@ -1,6 +1,6 @@
 use rand::RngExt;
 
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::collision::collision_strategy::CollisionStrategy;
 use crate::rsmod::coord_grid::CoordGrid;
 use crate::rsmod::step_validator::can_travel;
@@ -19,7 +19,7 @@ static mut RESULT: [u32; 1] = [0; 1];
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) unsafe fn find_naive_path<C: CollisionStrategy>(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,

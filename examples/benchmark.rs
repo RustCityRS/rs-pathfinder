@@ -1,5 +1,5 @@
 use rsmod::rsmod::collision::collision_strategy::CollisionType;
-use rsmod::{__set, change_player, find_path};
+use rsmod::{__set, change_player, find_route};
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -24,7 +24,7 @@ fn main() {
     loop {
         let start: Instant = Instant::now();
         for _ in 0..100_000 {
-            find_path(
+            find_route(
                 0,
                 3232,
                 3205,

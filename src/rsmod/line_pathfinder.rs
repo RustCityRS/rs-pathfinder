@@ -1,4 +1,4 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::coord_grid::CoordGrid;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::line::Line;
@@ -9,7 +9,7 @@ static mut LINE_BUFFER: [u32; MAX_LINE_COORDS] = [0; MAX_LINE_COORDS];
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) unsafe fn line_of_sight(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -45,7 +45,7 @@ pub(crate) unsafe fn line_of_sight(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) unsafe fn line_of_walk(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -81,7 +81,7 @@ pub(crate) unsafe fn line_of_walk(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 unsafe fn ray_cast_path(
-    flags: &CollisionFlagMap,
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -201,14 +201,14 @@ unsafe fn ray_cast_path(
 
 #[cfg(test)]
 mod tests {
-    use crate::rsmod::collision::collision::CollisionFlagMap;
+    use crate::rsmod::collision::collision::CollisionMap;
     use crate::rsmod::flag::collision_flag::CollisionFlag;
     use crate::rsmod::line_pathfinder::{line_of_sight, line_of_walk};
 
     const ARGS: [[i32; 2]; 4] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 
-    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionFlagMap {
-        let mut collision = CollisionFlagMap::new();
+    unsafe fn build_collision_map(x1: i32, z1: i32, x2: i32, z2: i32) -> CollisionMap {
+        let mut collision = CollisionMap::new();
         for y in 0..4 {
             for z in z1.min(z2)..=z1.max(z2) {
                 for x in x1.min(x2)..=x1.max(x2) {
@@ -216,7 +216,7 @@ mod tests {
                 }
             }
         }
-        return collision;
+        collision
     }
 
     #[test]
@@ -224,13 +224,13 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(3200, 3205, 0, CollisionFlag::Loc as u32);
 
             let line = line_of_walk(&collision, 0, src_x, src_z, 3200, 3207, 1, 1, 0, 0, 0);
-            assert!(!(line.len() > 0));
+            assert!(!(!line.is_empty()));
         }
     }
 
@@ -249,7 +249,7 @@ mod tests {
 
                     let line =
                         line_of_walk(&collision, y, src_x, src_z, dest_x, dest_z, 1, 1, 0, 0, 0);
-                    assert!(line.len() > 0);
+                    assert!(!line.is_empty());
                 }
             }
         }
@@ -270,7 +270,7 @@ mod tests {
 
                     let line =
                         line_of_walk(&collision, y, src_x, src_z, dest_x, dest_z, 1, 1, 0, 0, 0);
-                    assert!(!(line.len() > 0));
+                    assert!(!(!line.is_empty()));
                 }
             }
         }
@@ -299,7 +299,7 @@ mod tests {
                         let line = line_of_walk(
                             &collision, y, src_x, src_z, dest_x, dest_z, 1, 1, 0, 0, flag,
                         );
-                        assert!(!(line.len() > 0));
+                        assert!(!(!line.is_empty()));
                     }
                 }
             }
@@ -311,11 +311,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = line_of_sight(
                 &collision,
@@ -343,11 +343,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = line_of_sight(
                 &collision,
@@ -362,7 +362,7 @@ mod tests {
                 1,
                 CollisionFlag::Player as u32,
             );
-            assert!(!(line.len() > 0));
+            assert!(!(!line.is_empty()));
         }
     }
 
@@ -371,14 +371,14 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Loc as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Loc as u32);
 
             let line = line_of_sight(&collision, 0, src_x, src_z, 3200, 3201, 1, 1, 0, 0, 0);
-            assert!(!(line.len() > 0));
+            assert!(!(!line.is_empty()));
         }
     }
 
@@ -387,11 +387,11 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.allocate_if_absent(src_x, src_z, 0);
-            collision.add(src_x, src_z, 0, CollisionFlag::Player as u32);
+            collision.add_cmap(src_x, src_z, 0, CollisionFlag::Player as u32);
 
             let line = line_of_sight(
                 &collision,
@@ -406,7 +406,7 @@ mod tests {
                 0,
                 CollisionFlag::Player as u32,
             );
-            assert!(!(line.len() > 0));
+            assert!(!(!line.is_empty()));
         }
     }
 
@@ -415,7 +415,7 @@ mod tests {
     //     let src_x = 3200;
     //     let src_z = 3200;
     //
-    //     let mut collision = CollisionFlagMap::new();
+    //     let mut collision = CollisionMap::new();
     //
     //     unsafe {
     //         collision.allocate_if_absent(src_x, src_z, 0);
@@ -430,13 +430,13 @@ mod tests {
         let src_x = 3200;
         let src_z = 3200;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(3200, 3205, 0, CollisionFlag::LocProjBlocker as u32);
 
             let line = line_of_sight(&collision, 0, src_x, src_z, 3200, 3207, 1, 1, 0, 0, 0);
-            assert!(!(line.len() > 0));
+            assert!(!(!line.is_empty()));
         }
     }
 
@@ -444,9 +444,9 @@ mod tests {
     fn test_los_valid_line_of_sight() {
         let flags = [
             CollisionFlag::Open as u32,
-            CollisionFlag::Floor as u32,
-            CollisionFlag::FloorDecoration as u32,
-            CollisionFlag::Floor as u32 | CollisionFlag::FloorDecoration as u32,
+            CollisionFlag::Ground as u32,
+            CollisionFlag::GroundDecor as u32,
+            CollisionFlag::Ground as u32 | CollisionFlag::GroundDecor as u32,
         ];
 
         for [dir_x, dir_z] in ARGS {
@@ -463,7 +463,7 @@ mod tests {
                     }
                     let line =
                         line_of_sight(&collision, y, src_x, src_z, dest_x, dest_z, 1, 1, 0, 0, 0);
-                    assert!(line.len() > 0);
+                    assert!(!line.is_empty());
                 }
             }
         }
@@ -488,7 +488,7 @@ mod tests {
                     );
                     let line =
                         line_of_sight(&collision, y, src_x, src_z, dest_x, dest_z, 1, 1, 0, 0, 0);
-                    assert!(!(line.len() > 0));
+                    assert!(!(!line.is_empty()));
                 }
             }
         }
@@ -517,7 +517,7 @@ mod tests {
                         let line = line_of_sight(
                             &collision, y, src_x, src_z, dest_x, dest_z, 1, 1, 0, 0, flag,
                         );
-                        assert!(!(line.len() > 0));
+                        assert!(!(!line.is_empty()));
                     }
                 }
             }

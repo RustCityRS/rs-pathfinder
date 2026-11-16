@@ -1,10 +1,10 @@
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::flag::block_flag::BlockAccessFlag;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub fn collides(
+pub fn test_overlap(
     src_x: i32,
     src_z: i32,
     dest_x: i32,
@@ -23,8 +23,8 @@ pub fn collides(
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub(crate) unsafe fn reach_rectangle_1(
-    flags: &CollisionFlagMap,
+pub(crate) unsafe fn test_loc_1(
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -77,8 +77,8 @@ pub(crate) unsafe fn reach_rectangle_1(
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub(crate) unsafe fn reach_rectangle_n(
-    flags: &CollisionFlagMap,
+pub(crate) unsafe fn test_adjacent_edge(
+    flags: &CollisionMap,
     y: i32,
     src_x: i32,
     src_z: i32,
@@ -141,10 +141,10 @@ pub(crate) unsafe fn reach_rectangle_n(
 
 #[cfg(test)]
 mod tests {
-    use crate::rsmod::collision::collision::CollisionFlagMap;
+    use crate::rsmod::collision::collision::CollisionMap;
     use crate::rsmod::flag::block_flag::BlockAccessFlag;
     use crate::rsmod::flag::collision_flag::CollisionFlag;
-    use crate::rsmod::reach::rectangle_boundary::{collides, reach_rectangle_1, reach_rectangle_n};
+    use crate::rsmod::reach::rectangle_boundary::{test_adjacent_edge, test_loc_1, test_overlap};
 
     #[test]
     fn rec_bound_n_no_flags_should_return_true_when_src_is_west_of_dest() {
@@ -157,12 +157,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -174,7 +174,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -202,12 +202,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -219,7 +219,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -247,12 +247,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -264,7 +264,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -292,12 +292,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -309,7 +309,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -337,12 +337,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallEast as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -354,7 +354,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -382,12 +382,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallWest as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -399,7 +399,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -427,12 +427,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouth as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -444,7 +444,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -472,12 +472,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorth as u32);
 
-            let collides = collides(
+            let collides = test_overlap(
                 src_x,
                 src_z,
                 dest_x,
@@ -489,7 +489,7 @@ mod tests {
             );
             assert!(!collides);
 
-            let reached = reach_rectangle_n(
+            let reached = test_adjacent_edge(
                 &collision,
                 0,
                 src_x,
@@ -515,11 +515,11 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -543,11 +543,11 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -571,11 +571,11 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -599,11 +599,11 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -627,12 +627,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallEast as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -656,12 +656,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallWest as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -685,12 +685,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallNorth as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -714,12 +714,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouth as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -743,12 +743,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -772,12 +772,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -801,12 +801,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::Open as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,
@@ -830,12 +830,12 @@ mod tests {
         let dest_width = 2;
         let dest_height = 2;
 
-        let mut collision = CollisionFlagMap::new();
+        let mut collision = CollisionMap::new();
 
         unsafe {
             collision.set(src_x, src_z, 0, CollisionFlag::WallSouth as u32);
 
-            let reached = reach_rectangle_1(
+            let reached = test_loc_1(
                 &collision,
                 0,
                 src_x,

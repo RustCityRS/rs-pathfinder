@@ -3,14 +3,14 @@
 
 use once_cell::sync::Lazy;
 
-use crate::rsmod::collision::collision::CollisionFlagMap;
+use crate::rsmod::collision::collision::CollisionMap;
 use crate::rsmod::collision::collision_strategy::*;
 use crate::rsmod::collision::zone::ZoneFlagMap;
 use crate::rsmod::flag::collision_flag::CollisionFlag;
 use crate::rsmod::loc_angle::LocAngle;
 use crate::rsmod::loc_shape::LocShape;
-use crate::rsmod::pathfinder::PathFinder;
-use crate::rsmod::reach::reach_strategy::ReachStrategy;
+use crate::rsmod::pathfinder::RouteFinding;
+use crate::rsmod::reach::reach_strategy::RouteDestination;
 
 mod pool;
 pub mod rsmod;
@@ -21,7 +21,7 @@ pub use pool::{PathJob, PathPool, PathRequest};
 // single-threaded engine tick (loc/npc/player add/remove). Reads happen
 // from both sync and async (pooled) pathfinding. During any async phase,
 // no writer runs — so concurrent reads are sound.
-static mut COLLISION_FLAGS: Lazy<CollisionFlagMap> = Lazy::new(CollisionFlagMap::new);
+static mut COLLISION_FLAGS: Lazy<CollisionMap> = Lazy::new(CollisionMap::new);
 
 // `ZONE_FLAGS` is a zone-granularity byte plane for area attributes
 // (f2p / multiway) sharing `COLLISION_FLAGS`'s zone indexing. Same safety
@@ -30,13 +30,13 @@ static mut COLLISION_FLAGS: Lazy<CollisionFlagMap> = Lazy::new(CollisionFlagMap:
 // writer runs.
 static mut ZONE_FLAGS: Lazy<ZoneFlagMap> = Lazy::new(ZoneFlagMap::new);
 
-// Single PathFinder for synchronous tick-thread callers (player
+// Single RouteFinding for synchronous tick-thread callers (player
 // movement, script ops, interactive clicks).
 // "sync stage uses the global instance" pattern — this is the one
 // instance reused across sequential calls during the tick.
-static mut PATHFINDER: Lazy<PathFinder> = Lazy::new(PathFinder::new);
+static mut PATHFINDER: Lazy<RouteFinding> = Lazy::new(RouteFinding::new);
 
-/// **Sync** pathfind — uses the single tick-thread PathFinder. Call
+/// **Sync** pathfind — uses the single tick-thread RouteFinding. Call
 /// this from anywhere during the single-threaded tick (player walk,
 /// script `path` ops, click-to-move, etc.).
 ///
@@ -45,7 +45,7 @@ static mut PATHFINDER: Lazy<PathFinder> = Lazy::new(PathFinder::new);
 /// phase is in progress.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub fn find_path(
+pub fn find_route(
     y: u8,
     src_x: u16,
     src_z: u16,
@@ -63,7 +63,7 @@ pub fn find_path(
     route_blockers: bool,
 ) -> &'static [u32] {
     unsafe {
-        with_collision_strategy!(collision, route_blockers, strategy => PATHFINDER.find_path(
+        with_collision_strategy!(collision, route_blockers, strategy => PATHFINDER.find_route(
             &COLLISION_FLAGS,
             y as i32,
             src_x as i32,
@@ -120,9 +120,9 @@ pub fn find_naive_path(
 pub fn change_floor(x: u16, z: u16, y: u8, add: bool) {
     unsafe {
         if add {
-            COLLISION_FLAGS.add(x as i32, z as i32, y as i32, CollisionFlag::Floor as u32);
+            COLLISION_FLAGS.add_cmap(x as i32, z as i32, y as i32, CollisionFlag::Ground as u32);
         } else {
-            COLLISION_FLAGS.remove(x as i32, z as i32, y as i32, CollisionFlag::Floor as u32);
+            COLLISION_FLAGS.rem_cmap(x as i32, z as i32, y as i32, CollisionFlag::Ground as u32);
         }
     }
 }
@@ -155,11 +155,11 @@ pub fn change_loc(
     unsafe {
         if add {
             for index in 0..area {
-                COLLISION_FLAGS.add(x + (index % width), z + (index / width), y, mask);
+                COLLISION_FLAGS.add_cmap(x + (index % width), z + (index / width), y, mask);
             }
         } else {
             for index in 0..area {
-                COLLISION_FLAGS.remove(x + (index % width), z + (index / width), y, mask);
+                COLLISION_FLAGS.rem_cmap(x + (index % width), z + (index / width), y, mask);
             }
         }
     }
@@ -183,9 +183,9 @@ fn change_entity(x: u16, z: u16, y: u8, size: u8, add: bool, mask: u32) {
     unsafe {
         if size == 1 {
             if add {
-                COLLISION_FLAGS.add(x, z, y, mask);
+                COLLISION_FLAGS.add_cmap(x, z, y, mask);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, mask);
+                COLLISION_FLAGS.rem_cmap(x, z, y, mask);
             }
             return;
         }
@@ -193,9 +193,9 @@ fn change_entity(x: u16, z: u16, y: u8, size: u8, add: bool, mask: u32) {
         for dz in 0..size {
             for dx in 0..size {
                 if add {
-                    COLLISION_FLAGS.add(x + dx, z + dz, y, mask);
+                    COLLISION_FLAGS.add_cmap(x + dx, z + dz, y, mask);
                 } else {
-                    COLLISION_FLAGS.remove(x + dx, z + dz, y, mask);
+                    COLLISION_FLAGS.rem_cmap(x + dx, z + dz, y, mask);
                 }
             }
         }
@@ -206,9 +206,9 @@ fn change_entity(x: u16, z: u16, y: u8, size: u8, add: bool, mask: u32) {
 pub fn change_roof(x: u16, z: u16, y: u8, add: bool) {
     unsafe {
         if add {
-            COLLISION_FLAGS.add(x as i32, z as i32, y as i32, CollisionFlag::Roof as u32);
+            COLLISION_FLAGS.add_cmap(x as i32, z as i32, y as i32, CollisionFlag::Roof as u32);
         } else {
-            COLLISION_FLAGS.remove(x as i32, z as i32, y as i32, CollisionFlag::Roof as u32);
+            COLLISION_FLAGS.rem_cmap(x as i32, z as i32, y as i32, CollisionFlag::Roof as u32);
         }
     }
 }
@@ -284,38 +284,38 @@ unsafe fn change_wall_straight(
     match LocAngle::from(angle) {
         LocAngle::West => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, west);
-                COLLISION_FLAGS.add(x - 1, z, y, east);
+                COLLISION_FLAGS.add_cmap(x, z, y, west);
+                COLLISION_FLAGS.add_cmap(x - 1, z, y, east);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, west);
-                COLLISION_FLAGS.remove(x - 1, z, y, east);
+                COLLISION_FLAGS.rem_cmap(x, z, y, west);
+                COLLISION_FLAGS.rem_cmap(x - 1, z, y, east);
             }
         }
         LocAngle::North => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, north);
-                COLLISION_FLAGS.add(x, z + 1, y, south);
+                COLLISION_FLAGS.add_cmap(x, z, y, north);
+                COLLISION_FLAGS.add_cmap(x, z + 1, y, south);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, north);
-                COLLISION_FLAGS.remove(x, z + 1, y, south);
+                COLLISION_FLAGS.rem_cmap(x, z, y, north);
+                COLLISION_FLAGS.rem_cmap(x, z + 1, y, south);
             }
         }
         LocAngle::East => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, east);
-                COLLISION_FLAGS.add(x + 1, z, y, west);
+                COLLISION_FLAGS.add_cmap(x, z, y, east);
+                COLLISION_FLAGS.add_cmap(x + 1, z, y, west);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, east);
-                COLLISION_FLAGS.remove(x + 1, z, y, west);
+                COLLISION_FLAGS.rem_cmap(x, z, y, east);
+                COLLISION_FLAGS.rem_cmap(x + 1, z, y, west);
             }
         }
         LocAngle::South => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, south);
-                COLLISION_FLAGS.add(x, z - 1, y, north);
+                COLLISION_FLAGS.add_cmap(x, z, y, south);
+                COLLISION_FLAGS.add_cmap(x, z - 1, y, north);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, south);
-                COLLISION_FLAGS.remove(x, z - 1, y, north);
+                COLLISION_FLAGS.rem_cmap(x, z, y, south);
+                COLLISION_FLAGS.rem_cmap(x, z - 1, y, north);
             }
         }
     }
@@ -369,38 +369,38 @@ unsafe fn change_wall_corner(
     match LocAngle::from(angle) {
         LocAngle::West => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, north_west);
-                COLLISION_FLAGS.add(x - 1, z + 1, y, south_east);
+                COLLISION_FLAGS.add_cmap(x, z, y, north_west);
+                COLLISION_FLAGS.add_cmap(x - 1, z + 1, y, south_east);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, north_west);
-                COLLISION_FLAGS.remove(x - 1, z + 1, y, south_east);
+                COLLISION_FLAGS.rem_cmap(x, z, y, north_west);
+                COLLISION_FLAGS.rem_cmap(x - 1, z + 1, y, south_east);
             }
         }
         LocAngle::North => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, north_east);
-                COLLISION_FLAGS.add(x + 1, z + 1, y, south_west);
+                COLLISION_FLAGS.add_cmap(x, z, y, north_east);
+                COLLISION_FLAGS.add_cmap(x + 1, z + 1, y, south_west);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, north_east);
-                COLLISION_FLAGS.remove(x + 1, z + 1, y, south_west);
+                COLLISION_FLAGS.rem_cmap(x, z, y, north_east);
+                COLLISION_FLAGS.rem_cmap(x + 1, z + 1, y, south_west);
             }
         }
         LocAngle::East => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, south_east);
-                COLLISION_FLAGS.add(x + 1, z - 1, y, north_west);
+                COLLISION_FLAGS.add_cmap(x, z, y, south_east);
+                COLLISION_FLAGS.add_cmap(x + 1, z - 1, y, north_west);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, south_east);
-                COLLISION_FLAGS.remove(x + 1, z - 1, y, north_west);
+                COLLISION_FLAGS.rem_cmap(x, z, y, south_east);
+                COLLISION_FLAGS.rem_cmap(x + 1, z - 1, y, north_west);
             }
         }
         LocAngle::South => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, south_west);
-                COLLISION_FLAGS.add(x - 1, z - 1, y, north_east);
+                COLLISION_FLAGS.add_cmap(x, z, y, south_west);
+                COLLISION_FLAGS.add_cmap(x - 1, z - 1, y, north_east);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, south_west);
-                COLLISION_FLAGS.remove(x - 1, z - 1, y, north_east);
+                COLLISION_FLAGS.rem_cmap(x, z, y, south_west);
+                COLLISION_FLAGS.rem_cmap(x - 1, z - 1, y, north_east);
             }
         }
     }
@@ -454,46 +454,46 @@ unsafe fn change_wall_l(
     match LocAngle::from(angle) {
         LocAngle::West => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, north | west);
-                COLLISION_FLAGS.add(x - 1, z, y, east);
-                COLLISION_FLAGS.add(x, z + 1, y, south);
+                COLLISION_FLAGS.add_cmap(x, z, y, north | west);
+                COLLISION_FLAGS.add_cmap(x - 1, z, y, east);
+                COLLISION_FLAGS.add_cmap(x, z + 1, y, south);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, north | west);
-                COLLISION_FLAGS.remove(x - 1, z, y, east);
-                COLLISION_FLAGS.remove(x, z + 1, y, south);
+                COLLISION_FLAGS.rem_cmap(x, z, y, north | west);
+                COLLISION_FLAGS.rem_cmap(x - 1, z, y, east);
+                COLLISION_FLAGS.rem_cmap(x, z + 1, y, south);
             }
         }
         LocAngle::North => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, north | east);
-                COLLISION_FLAGS.add(x, z + 1, y, south);
-                COLLISION_FLAGS.add(x + 1, z, y, west);
+                COLLISION_FLAGS.add_cmap(x, z, y, north | east);
+                COLLISION_FLAGS.add_cmap(x, z + 1, y, south);
+                COLLISION_FLAGS.add_cmap(x + 1, z, y, west);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, north | east);
-                COLLISION_FLAGS.remove(x, z + 1, y, south);
-                COLLISION_FLAGS.remove(x + 1, z, y, west);
+                COLLISION_FLAGS.rem_cmap(x, z, y, north | east);
+                COLLISION_FLAGS.rem_cmap(x, z + 1, y, south);
+                COLLISION_FLAGS.rem_cmap(x + 1, z, y, west);
             }
         }
         LocAngle::East => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, south | east);
-                COLLISION_FLAGS.add(x + 1, z, y, west);
-                COLLISION_FLAGS.add(x, z - 1, y, north);
+                COLLISION_FLAGS.add_cmap(x, z, y, south | east);
+                COLLISION_FLAGS.add_cmap(x + 1, z, y, west);
+                COLLISION_FLAGS.add_cmap(x, z - 1, y, north);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, south | east);
-                COLLISION_FLAGS.remove(x + 1, z, y, west);
-                COLLISION_FLAGS.remove(x, z - 1, y, north);
+                COLLISION_FLAGS.rem_cmap(x, z, y, south | east);
+                COLLISION_FLAGS.rem_cmap(x + 1, z, y, west);
+                COLLISION_FLAGS.rem_cmap(x, z - 1, y, north);
             }
         }
         LocAngle::South => {
             if add {
-                COLLISION_FLAGS.add(x, z, y, south | west);
-                COLLISION_FLAGS.add(x, z - 1, y, north);
-                COLLISION_FLAGS.add(x - 1, z, y, east);
+                COLLISION_FLAGS.add_cmap(x, z, y, south | west);
+                COLLISION_FLAGS.add_cmap(x, z - 1, y, north);
+                COLLISION_FLAGS.add_cmap(x - 1, z, y, east);
             } else {
-                COLLISION_FLAGS.remove(x, z, y, south | west);
-                COLLISION_FLAGS.remove(x, z - 1, y, north);
-                COLLISION_FLAGS.remove(x - 1, z, y, east);
+                COLLISION_FLAGS.rem_cmap(x, z, y, south | west);
+                COLLISION_FLAGS.rem_cmap(x, z - 1, y, north);
+                COLLISION_FLAGS.rem_cmap(x - 1, z, y, east);
             }
         }
     }
@@ -773,7 +773,7 @@ pub fn line_of_walk(
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub fn reached(
+pub fn has_arrived(
     y: u8,
     src_x: u16,
     src_z: u16,
@@ -787,7 +787,7 @@ pub fn reached(
     block_access_flags: u8,
 ) -> bool {
     unsafe {
-        ReachStrategy::reached(
+        RouteDestination::has_arrived(
             &COLLISION_FLAGS,
             y as i32,
             src_x as i32,
